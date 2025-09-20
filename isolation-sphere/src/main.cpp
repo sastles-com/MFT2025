@@ -1,169 +1,133 @@
+#include <FastLED.h>
+#include <Preferences.h>
+#include <WiFi.h>
+#include <Wire.h>
 #include <M5Unified.h>
-#include <LittleFS.h>
-#include <PSRamFS.h>
+// #include "AtomS3R_Display.h"  // M5Unifiedを使用するため無効化
 
-namespace {
-constexpr const char *kImageRoot = "/images";
-constexpr size_t kCopyBufferSize = 2048;
+// AtomS3R LED設定
+#define LED_PIN 35        // AtomS3R内蔵LED
+#define NUM_LEDS 1
+#define BUTTON_PIN 41     // AtomS3Rボタン
 
-#ifdef DEBUG
-void logDirectory(fs::FS &fs, const char *path, uint_fast8_t depth = 0) {
-  File dir = fs.open(path);
-  if (!dir || !dir.isDirectory()) {
-    Serial.printf("[Debug] %s is not a directory\n", path);
-    if (dir) {
-      dir.close();
-    }
-    return;
-  }
-
-  Serial.printf("[Debug] Listing %s\n", path);
-  File entry = dir.openNextFile();
-  while (entry) {
-    for (uint_fast8_t i = 0; i < depth; ++i) {
-      Serial.print(' ');
-      Serial.print(' ');
-    }
-    Serial.printf("%s%s\n", entry.name(), entry.isDirectory() ? "/" : "");
-    if (entry.isDirectory()) {
-      logDirectory(fs, entry.name(), depth + 1);
-    }
-    entry = dir.openNextFile();
-  }
-  dir.close();
-}
-#endif
-
-bool copyFile(fs::FS &src, fs::FS &dst, const char *srcPath, const char *dstPath) {
-  File in = src.open(srcPath, FILE_READ);
-  if (!in) {
-    Serial.printf("[LittleFS] failed to open %s for read\n", srcPath);
-    return false;
-  }
-  File out = dst.open(dstPath, FILE_WRITE);
-  if (!out) {
-    Serial.printf("[PSRamFS] failed to open %s for write\n", dstPath);
-    in.close();
-    return false;
-  }
-
-  uint8_t buffer[kCopyBufferSize];
-  while (in.available()) {
-    size_t read = in.read(buffer, sizeof(buffer));
-    if (!read) {
-      break;
-    }
-    size_t written = out.write(buffer, read);
-    if (written != read) {
-      Serial.printf("[PSRamFS] short write on %s\n", dstPath);
-      in.close();
-      out.close();
-      return false;
-    }
-  }
-
-  in.close();
-  out.close();
-  return true;
-}
-
-bool mirrorDirectory(fs::FS &src, fs::FS &dst, const char *path) {
-  File dir = src.open(path);
-  if (!dir || !dir.isDirectory()) {
-    Serial.printf("[LittleFS] directory %s not found\n", path);
-    return false;
-  }
-
-  if (!dst.exists(path)) {
-    if (!dst.mkdir(path)) {
-      Serial.printf("[PSRamFS] failed to mkdir %s\n", path);
-      dir.close();
-      return false;
-    }
-  }
-
-  File entry = dir.openNextFile();
-  while (entry) {
-    String entryName = entry.name();
-    if (entry.isDirectory()) {
-      if (!mirrorDirectory(src, dst, entryName.c_str())) {
-        entry.close();
-        dir.close();
-        return false;
-      }
-    } else {
-      if (!copyFile(src, dst, entryName.c_str(), entryName.c_str())) {
-        entry.close();
-        dir.close();
-        return false;
-      }
-    }
-    entry = dir.openNextFile();
-  }
-
-  dir.close();
-  return true;
-}
-
-bool mountFileSystems() {
-  if (!LittleFS.begin(false)) {
-    Serial.println("[LittleFS] mount failed, formatting...");
-    if (!LittleFS.begin(true)) {
-      Serial.println("[LittleFS] mount failed after format");
-      return false;
-    }
-  }
-
-  if (!PSRamFS.begin()) {
-    Serial.println("[PSRamFS] mount failed");
-    return false;
-  }
-
-  return true;
-}
-
-bool stageAssets() {
-  if (!LittleFS.exists(kImageRoot)) {
-    Serial.println("[LittleFS] no image assets to mirror");
-    return true;
-  }
-  return mirrorDirectory(LittleFS, PSRamFS, kImageRoot);
-}
-}
+CRGB leds[NUM_LEDS];
+Preferences prefs;
+// AtomS3R_Display lcd;  // M5.Lcdを使用するため無効化
 
 void setup() {
-  auto cfg = M5.config();
-  cfg.fallback_board = m5::board_t::board_M5AtomS3R;
-  M5.begin(cfg);
-
+  // M5Unified初期化（必須）
+  M5.begin();
+  
   Serial.begin(115200);
-  Serial.println();
-  Serial.println("Isolation Sphere booting...");
-
-  if (!mountFileSystems()) {
-    M5.Log.println("Filesystem init failed");
-    while (true) {
-      delay(1000);
-      M5.Log.println("-- Filesystem init failed");
-    }
-  }
-
-  if (!stageAssets()) {
-    M5.Log.println("Asset staging failed");
-  }
-
-#ifdef DEBUG
-  if (PSRamFS.exists(kImageRoot)) {
-    logDirectory(PSRamFS, kImageRoot);
-  } else {
-    Serial.printf("[Debug] %s not found in PSRamFS\n", kImageRoot);
-  }
-#endif
-
-  M5.Log.println("LittleFS and PSRamFS ready");
+  delay(1000);
+  Serial.println("Starting AtomS3R with FastLED...");
+  
+  // ボタン初期化
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
+  
+  // FastLED初期化
+  Serial.println("Initializing FastLED...");
+  FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, NUM_LEDS);
+  FastLED.setBrightness(50);  // 輝度50%
+  
+  // LED動作テスト
+  Serial.println("LED test starting...");
+  leds[0] = CRGB::Red;
+  FastLED.show();
+  delay(500);
+  
+  leds[0] = CRGB::Green;
+  FastLED.show();
+  delay(500);
+  
+  leds[0] = CRGB::Blue;
+  FastLED.show();
+  delay(500);
+  
+  leds[0] = CRGB::Black;
+  FastLED.show();
+  
+  Serial.println("FastLED initialized successfully!");
+  
+  // M5Unified LCD初期化
+  Serial.println("=== Starting M5Unified LCD initialization ===");
+  
+  // LCD設定
+  M5.Lcd.begin();
+  M5.Lcd.setRotation(0);  // 0度回転
+  M5.Lcd.setBrightness(180);  // 明度設定
+  M5.Lcd.fillScreen(TFT_BLACK);
+  
+  Serial.println("Step 1: M5.Lcd initialized");
+  
+  // テスト表示
+  M5.Lcd.fillScreen(TFT_GREEN);  // Green background
+  delay(200);
+  
+  M5.Lcd.setTextColor(TFT_BLACK);  // Black text on green
+  M5.Lcd.setTextSize(2);
+  M5.Lcd.setCursor(10, 30);
+  M5.Lcd.println("AtomS3R");
+  
+  M5.Lcd.setTextColor(TFT_WHITE);  // White text
+  M5.Lcd.setTextSize(1);
+  M5.Lcd.setCursor(10, 60);
+  M5.Lcd.println("LCD Working!");
+  
+  M5.Lcd.setCursor(10, 80);
+  M5.Lcd.println("M5Unified OK!");
+  
+  // カラーテスト
+  M5.Lcd.fillRect(10, 100, 20, 20, TFT_RED);     // Red
+  M5.Lcd.fillRect(40, 100, 20, 20, TFT_GREEN);   // Green  
+  M5.Lcd.fillRect(70, 100, 20, 20, TFT_BLUE);    // Blue
+  
+  Serial.println("Step 2: M5Unified LCD test display completed!");
+  Serial.println("=== M5Unified LCD initialization complete ===");
+  
+  // デバイス情報を表示
+  Serial.println("Device Info:");
+  Serial.println("- Heap free: " + String(ESP.getFreeHeap()));
+  Serial.println("- PSRAM size: " + String(ESP.getPsramSize()));
+  Serial.println("- Flash size: " + String(ESP.getFlashChipSize()));
+  Serial.println("- CPU frequency: " + String(ESP.getCpuFreqMHz()) + "MHz");
+  Serial.println("- MAC address: " + WiFi.macAddress());
+  
+  Serial.println("Setup complete - AtomS3R ready!");
 }
 
 void loop() {
+  // M5Unified更新（必須）
   M5.update();
-  delay(16);
+  
+  static unsigned long lastUpdate = 0;
+  static int counter = 0;
+  static int colorIndex = 0;
+  
+  // ボタン状態チェック
+  bool buttonPressed = digitalRead(BUTTON_PIN) == LOW;
+  
+  if (millis() - lastUpdate > 2000) {  // 2秒間隔
+    counter++;
+    
+    // シリアル出力
+    Serial.println("Device running stable - " + String(millis()/1000) + "s uptime, count: " + String(counter));
+    
+    // LED色を変更（虹色サイクル）
+    CRGB colors[] = {CRGB::Red, CRGB::Orange, CRGB::Yellow, CRGB::Green, CRGB::Blue, CRGB::Purple};
+    leds[0] = colors[colorIndex % 6];
+    colorIndex++;
+    
+    // ボタンが押されている場合は白色
+    if (buttonPressed) {
+      leds[0] = CRGB::White;
+      Serial.println("Button pressed!");
+    }
+    
+    FastLED.show();
+    lastUpdate = millis();
+  }
+  
+  // delay(50);
+  delay(3);
 }
