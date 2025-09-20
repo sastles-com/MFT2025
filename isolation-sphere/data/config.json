@@ -1,0 +1,86 @@
+{
+  "system": {
+    "name": "sphere-001",
+    "PSRAM": true,
+    "SPIFFS_size": 3.0,
+    "debug": true
+  },
+  "image": {
+    "width": 320,
+    "height": 160,
+    "format": "RGB565",
+    "type": "JPEG"
+  },
+  "display": {
+    "width": 128,
+    "height": 128,
+    "rotation": 0,
+    "offset": [
+      0,
+      0
+    ],
+    "color_depth": 16,
+    "switch": true,
+    "debug": true
+  },
+  "paths": {
+    "opening": "/spiffs/images/opening/",
+    "layout": "/spiffs/led_layout.csv",
+    "config": "/spiffs/config.json",
+    "images": "/spiffs/images/"
+  },
+  "wifi": {
+    "ssid": "IsolationSphere-Direct",
+    "password": "sastle1234",
+    "max_retries": 5
+  },
+  "udp": {
+    "enabled": false,
+    "port": 8000,
+    "buffer_frames": 2
+  },
+  "mqtt": {
+    "enabled": true,
+    "broker": "192.168.10.1",
+    "port": 1883,
+    "topic": {
+      "ui": "sphere/ui",
+      "status": "sphere/status",
+      "image": "sphere/image"
+    }
+  },
+  "demo": {
+    "frame_max": 50,
+    "fps": 10
+  },
+  "imu": {
+    "enabled": true,
+    "gesture_ui_mode": true,
+    "gesture_debug_log": false,
+    "gesture_threshold_mps2": 15.0,
+    "gesture_window_ms": 400,
+    "update_interval_ms": 33
+  },
+  "buzzer": {
+    "enabled": false,
+    "volume": 50
+  },
+  "led": {
+    "enabled": true,
+    "brightness": 128,
+    "strip_gpios": [
+      5,
+      6,
+      7,
+      8
+    ],
+    "num_strips": 4,
+    "leds_per_strip": [
+      180,
+      220,
+      180,
+      220
+    ],
+    "total_leds": 800
+  }
+}
