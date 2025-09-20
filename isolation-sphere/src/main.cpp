@@ -6,6 +6,34 @@ namespace {
 constexpr const char *kImageRoot = "/images";
 constexpr size_t kCopyBufferSize = 2048;
 
+#ifdef DEBUG
+void logDirectory(fs::FS &fs, const char *path, uint_fast8_t depth = 0) {
+  File dir = fs.open(path);
+  if (!dir || !dir.isDirectory()) {
+    Serial.printf("[Debug] %s is not a directory\n", path);
+    if (dir) {
+      dir.close();
+    }
+    return;
+  }
+
+  Serial.printf("[Debug] Listing %s\n", path);
+  File entry = dir.openNextFile();
+  while (entry) {
+    for (uint_fast8_t i = 0; i < depth; ++i) {
+      Serial.print(' ');
+      Serial.print(' ');
+    }
+    Serial.printf("%s%s\n", entry.name(), entry.isDirectory() ? "/" : "");
+    if (entry.isDirectory()) {
+      logDirectory(fs, entry.name(), depth + 1);
+    }
+    entry = dir.openNextFile();
+  }
+  dir.close();
+}
+#endif
+
 bool copyFile(fs::FS &src, fs::FS &dst, const char *srcPath, const char *dstPath) {
   File in = src.open(srcPath, FILE_READ);
   if (!in) {
@@ -105,6 +133,7 @@ bool stageAssets() {
 
 void setup() {
   auto cfg = M5.config();
+  cfg.fallback_board = m5::board_t::board_M5AtomS3R;
   M5.begin(cfg);
 
   Serial.begin(115200);
@@ -115,12 +144,21 @@ void setup() {
     M5.Log.println("Filesystem init failed");
     while (true) {
       delay(1000);
+      M5.Log.println("-- Filesystem init failed");
     }
   }
 
   if (!stageAssets()) {
     M5.Log.println("Asset staging failed");
   }
+
+#ifdef DEBUG
+  if (PSRamFS.exists(kImageRoot)) {
+    logDirectory(PSRamFS, kImageRoot);
+  } else {
+    Serial.printf("[Debug] %s not found in PSRamFS\n", kImageRoot);
+  }
+#endif
 
   M5.Log.println("LittleFS and PSRamFS ready");
 }
