@@ -3,29 +3,32 @@
 #include <WiFi.h>
 #include <Wire.h>
 #include <M5Unified.h>
-// #include "AtomS3R_Display.h"  // M5Unifiedを使用するため無効化
+#include <esp_task_wdt.h>
 
-// AtomS3R LED設定
-#define LED_PIN 35        // AtomS3R内蔵LED
-#define NUM_LEDS 1
 #define BUTTON_PIN 41     // AtomS3Rボタン
 
-CRGB leds[NUM_LEDS];
-Preferences prefs;
-// AtomS3R_Display lcd;  // M5.Lcdを使用するため無効化
 
 void setup() {
-  // M5Unified初期化（必須）
-  M5.begin();
-  
   Serial.begin(115200);
-  delay(1000);
-  Serial.println("Starting AtomS3R with FastLED...");
+  delay(500);
+  Serial.println("Starting AtomS3R initialization...");
+  
+  // M5Unified初期化（動作実績のある設定を使用）
+  auto cfg = M5.config();
+  cfg.external_spk = false;  // 外部スピーカー無効
+  cfg.output_power = false;  // 電源出力無効
+  cfg.internal_imu = false;  // IMU無効（SPIバス競合回避）
+  cfg.internal_rtc = false;  // RTC無効（I2C競合回避）
+  M5.begin(cfg);
+  
+  Serial.println("M5.begin() completed");
+  delay(500);
   
   // ボタン初期化
   pinMode(BUTTON_PIN, INPUT_PULLUP);
   
-  // FastLED初期化
+  // FastLED初期化（一時的に無効化してSPI競合を回避）
+#if defined(USE_FASTLED)
   Serial.println("Initializing FastLED...");
   FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, NUM_LEDS);
   FastLED.setBrightness(50);  // 輝度50%
@@ -48,42 +51,59 @@ void setup() {
   FastLED.show();
   
   Serial.println("FastLED initialized successfully!");
+#else
+  Serial.println("FastLED disabled (USE_FASTLED not defined)");
+#endif
   
-  // M5Unified LCD初期化
-  Serial.println("=== Starting M5Unified LCD initialization ===");
+  // WDTフィード（初期化時間を確保）
+  esp_task_wdt_reset();
+  delay(100);
   
-  // LCD設定
-  M5.Lcd.begin();
-  M5.Lcd.setRotation(0);  // 0度回転
-  M5.Lcd.setBrightness(180);  // 明度設定
-  M5.Lcd.fillScreen(TFT_BLACK);
+  // M5.Display初期化（動作実績のあるアプローチ）
+  Serial.println("=== Starting M5.Display initialization ===");
+  esp_task_wdt_reset();
   
-  Serial.println("Step 1: M5.Lcd initialized");
+  // Display設定
+  bool display_ok = M5.Display.begin();
+  esp_task_wdt_reset();
+  
+  if (display_ok) {
+    Serial.println("Step 1: M5.Display.begin() SUCCESS");
+  } else {
+    Serial.println("Step 1: M5.Display.begin() FAILED");
+    // 失敗してもCPUリセットを回避して続行
+  }
+  
+  // AtomS3R は GC9107 + offset_y=32 が自動適用される想定
+  M5.Display.setRotation(0);  // 0度回転
+  M5.Display.setBrightness(200);  // 明度設定（0-255）
+  M5.Display.fillScreen(TFT_BLACK);
+  esp_task_wdt_reset();
+  
+  Serial.println("Step 2: M5.Display basic setup completed");
   
   // テスト表示
-  M5.Lcd.fillScreen(TFT_GREEN);  // Green background
+  M5.Display.fillScreen(TFT_GREEN);  // Green background
   delay(200);
   
-  M5.Lcd.setTextColor(TFT_BLACK);  // Black text on green
-  M5.Lcd.setTextSize(2);
-  M5.Lcd.setCursor(10, 30);
-  M5.Lcd.println("AtomS3R");
+  M5.Display.setTextColor(TFT_BLACK);  // Black text on green
+  M5.Display.setTextSize(2);
+  M5.Display.setTextDatum(MC_DATUM);  // 中央揃え
+  M5.Display.drawString("AtomS3R", 64, 30);
   
-  M5.Lcd.setTextColor(TFT_WHITE);  // White text
-  M5.Lcd.setTextSize(1);
-  M5.Lcd.setCursor(10, 60);
-  M5.Lcd.println("LCD Working!");
-  
-  M5.Lcd.setCursor(10, 80);
-  M5.Lcd.println("M5Unified OK!");
+  M5.Display.setTextColor(TFT_WHITE);  // White text
+  M5.Display.setTextSize(1);
+  M5.Display.setTextDatum(MC_DATUM);
+  M5.Display.drawString("Display OK!", 64, 60);
+  M5.Display.drawString("M5Unified", 64, 80);
   
   // カラーテスト
-  M5.Lcd.fillRect(10, 100, 20, 20, TFT_RED);     // Red
-  M5.Lcd.fillRect(40, 100, 20, 20, TFT_GREEN);   // Green  
-  M5.Lcd.fillRect(70, 100, 20, 20, TFT_BLUE);    // Blue
+  M5.Display.fillRect(10, 100, 20, 20, TFT_RED);     // Red
+  M5.Display.fillRect(40, 100, 20, 20, TFT_GREEN);   // Green  
+  M5.Display.fillRect(70, 100, 20, 20, TFT_BLUE);    // Blue
   
-  Serial.println("Step 2: M5Unified LCD test display completed!");
-  Serial.println("=== M5Unified LCD initialization complete ===");
+  Serial.println("Step 2: M5.Display test display completed!");
+  Serial.println("=== M5.Display initialization complete ===");
   
   // デバイス情報を表示
   Serial.println("Device Info:");
@@ -123,8 +143,10 @@ void loop() {
       leds[0] = CRGB::White;
       Serial.println("Button pressed!");
     }
-    
+
+#if defined(USE_FASTLED)
     FastLED.show();
+#endif
     lastUpdate = millis();
   }
   
