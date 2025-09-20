@@ -1,0 +1,114 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "isolation-sphere-test-clients"
+version = "1.0.0"
+description = "isolation-sphere Atom-JoyStick テストクライアント・ダミー環境"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [
+    { name = "isolation-sphere project" }
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: System :: Hardware",
+    "Topic :: System :: Networking",
+    "Topic :: Software Development :: Testing",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12"
+]
+requires-python = ">=3.8"
+dependencies = [
+    "paho-mqtt>=1.6.1",
+    "requests>=2.25.1",
+    "flask>=2.0.1",
+    "psutil>=5.8.0"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=22.0",
+    "flake8>=4.0",
+    "mypy>=1.0"
+]
+
+[project.scripts]
+dummy-esp32 = "dummy_esp32_client:main"
+dummy-raspi = "dummy_raspi_client:main"
+mqtt-monitor = "mqtt_monitor:main"
+network-tester = "network_tester:main"
+
+[project.urls]
+Homepage = "https://github.com/sastles-com/sastle"
+Repository = "https://github.com/sastles-com/sastle.git"
+Documentation = "https://github.com/sastles-com/sastle/tree/main/atom-joystick"
+
+[tool.hatch.version]
+path = "pyproject.toml"
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+show_column_numbers = true
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "--verbose",
+]
+testpaths = ["tests"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "network: marks tests requiring network access",
+]
+
+# uv specific configuration
+[tool.uv]
+dev-dependencies = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21.0", 
+    "black>=22.0",
+    "flake8>=4.0",
+    "mypy>=1.0"
+]

@@ -1,0 +1,27 @@
+# isolation-sphere Atom-JoyStick テストクライアント依存関係
+# MacBook用ダミー環境・テスト・デバッグツール
+
+# MQTT通信
+paho-mqtt>=1.6.1
+
+# Web API・HTTP通信
+requests>=2.25.1
+flask>=2.0.1
+
+# システム情報・監視
+psutil>=5.8.0
+
+# JSON処理・データ操作
+# (標準ライブラリのjsonを使用)
+
+# 統計・数値処理  
+# (標準ライブラリのstatisticsを使用)
+
+# コマンドライン・対話機能
+# (標準ライブラリのargparseを使用)
+
+# 日時処理
+# (標準ライブラリのdatetimeを使用)
+
+# マルチスレッド・並行処理
+# (標準ライブラリのthreadingを使用)

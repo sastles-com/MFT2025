@@ -1,0 +1,70 @@
+{
+  "wifi": {
+    "ssid": "IsolationSphere-Direct",
+    "password": "", 
+    "mode": "client",
+    "static_ip": "192.168.100.100",
+    "fallback": {
+      "ssid": "TP-Link_7CB8_5G",
+      "password": "your_home_wifi_password",
+      "dhcp": true
+    }
+  },
+  "communication": {
+    "udp_port": 1884,
+    "joystick_ip": "192.168.100.1",
+    "joystick_ssid": "IsolationSphere-Direct",
+    "response_timeout": 100
+  },
+  "led": {
+    "pin": 35,
+    "count": 1,
+    "brightness": 128,
+    "update_rate": 30
+  },
+  "debug": {
+    "serial_output": false,
+    "performance_monitor": false
+  },
+  "opening": {
+    "enabled": true,
+    "frame_duration_ms": 400,
+    "brightness": 200,
+    "fade_effect": false,
+    "fade_steps": 10
+  },
+  "device_management": {
+    "mac_address_filtering": true,
+    "auto_ip_assignment": true,
+    "base_ip": "192.168.100.100",
+    "registered_devices": [
+      {
+        "id": 0,
+        "name": "AtomS3-Primary",
+        "mac_address": "DC:54:75:D0:97:24",
+        "ip_address": "192.168.100.100",
+        "device_type": "atoms3_receiver",
+        "enabled": true,
+        "description": "メインAtomS3受信デバイス"
+      },
+      {
+        "id": 1,
+        "name": "AtomS3-Secondary",
+        "mac_address": "AA:BB:CC:DD:EE:FF",
+        "ip_address": "192.168.100.101",
+        "device_type": "atoms3_receiver", 
+        "enabled": false,
+        "description": "予備AtomS3受信デバイス"
+      },
+      {
+        "id": 2,
+        "name": "AtomS3-Display",
+        "mac_address": "11:22:33:44:55:66",
+        "ip_address": "192.168.100.102",
+        "device_type": "atoms3_display",
+        "enabled": false,
+        "description": "専用ディスプレイデバイス"
+      }
+    ]
+  }
+}

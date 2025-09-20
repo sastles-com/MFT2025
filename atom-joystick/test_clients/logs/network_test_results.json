@@ -1,0 +1,6 @@
+{
+  "ping_tests": [],
+  "tcp_tests": [],
+  "http_tests": [],
+  "mqtt_tests": []
+}

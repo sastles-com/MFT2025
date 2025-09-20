@@ -1,0 +1,33 @@
+{
+  "wifi_ap": {
+    "ssid": "IsolationSphere-Direct",
+    "password": "",
+    "local_ip": "192.168.100.1",
+    "gateway": "192.168.100.1",
+    "subnet": "255.255.255.0",
+    "channel": 6,
+    "hidden": false,
+    "max_connections": 8
+  },
+  "udp": {
+    "target_ip": "192.168.100.100",
+    "port": 1884,
+    "update_interval_ms": 30,
+    "joystick_read_interval_ms": 16,
+    "max_retry_count": 3,
+    "timeout_ms": 1000
+  },
+  "system": {
+    "buzzer_enabled": true,
+    "buzzer_volume": 51,
+    "opening_animation_enabled": true,
+    "lcd_brightness": 200,
+    "debug_mode": false,
+    "device_name": "AtomJoyStick-01"
+  },
+  "meta": {
+    "version": "1.0",
+    "created_at": 1725543690000,
+    "device_type": "M5Stack-AtomJoyStick"
+  }
+}
