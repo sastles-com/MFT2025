@@ -13,6 +13,59 @@
 #include <LittleFS.h>
 #include <PSRamFS.h>
 
+// PSRAM検出・テスト関数
+void testPSRAM() {
+  Serial.println("\n=== PSRAM Test Start ===");
+  
+  const char* name;
+  switch (M5.getBoard()) {
+      case m5::board_t::board_M5StackCoreS3:  name = "StackS3";     break;
+      case m5::board_t::board_M5AtomS3Lite:   name = "ATOMS3Lite";  break;
+      case m5::board_t::board_M5AtomS3:       name = "ATOMS3";      break;
+      case m5::board_t::board_M5StampC3:      name = "StampC3";     break;
+      case m5::board_t::board_M5StampS3:      name = "StampS3";     break;
+      case m5::board_t::board_M5StampC3U:     name = "StampC3U";    break;
+      case m5::board_t::board_M5Stack:        name = "Stack";       break;
+      case m5::board_t::board_M5StackCore2:   name = "StackCore2";  break;
+      case m5::board_t::board_M5StickC:       name = "StickC";      break;
+      case m5::board_t::board_M5StickCPlus:   name = "StickCPlus";  break;
+      case m5::board_t::board_M5StackCoreInk: name = "CoreInk";     break;
+      case m5::board_t::board_M5Paper:        name = "Paper";       break;
+      case m5::board_t::board_M5Tough:        name = "Tough";       break;
+      case m5::board_t::board_M5Station:      name = "Station";     break;
+      case m5::board_t::board_M5Atom:         name = "ATOM";        break;
+      case m5::board_t::board_M5AtomPsram:    name = "ATOM PSRAM";  break;
+      case m5::board_t::board_M5AtomU:        name = "ATOM U";      break;
+      case m5::board_t::board_M5TimerCam:     name = "TimerCamera"; break;
+      case m5::board_t::board_M5StampPico:    name = "StampPico";   break;
+      case m5::board_t::board_M5AtomS3R:      name = "M5AtomS3R";   break;
+      case m5::board_t::board_M5AtomS3U:      name = "M5AtomS3U";   break;
+      default:                                name = "Who am I ?";  break;
+  }
+  Serial.println(name);
+  
+  // PSRAMの初期化
+  if (!psramInit()) {
+      Serial.println("✗ PSRAM初期化失敗");
+  } else {
+      Serial.println("✓ PSRAM初期化成功");
+      Serial.printf("Total PSRAM : %u bytes (%.2f MB)\n", ESP.getPsramSize(), ESP.getPsramSize() / 1024.0 / 1024.0);
+      Serial.printf("Free  PSRAM : %u bytes (%.2f MB)\n", ESP.getFreePsram(), ESP.getFreePsram() / 1024.0 / 1024.0);
+  }
+
+  void* psram_buffer = heap_caps_malloc(1024 * 1024, MALLOC_CAP_SPIRAM);
+  if (psram_buffer == NULL) {
+      Serial.println("✗ PSRAMからメモリ確保失敗");
+  } else {
+      Serial.println("✓ PSRAMからメモリ確保成功");
+      Serial.printf("Total PSRAM : %u bytes (%.2f MB)\n", ESP.getPsramSize(), ESP.getPsramSize() / 1024.0 / 1024.0);
+      Serial.printf("Free  PSRAM : %u bytes (%.2f MB)\n", ESP.getFreePsram(), ESP.getFreePsram() / 1024.0 / 1024.0);
+      free(psram_buffer);
+  }    
+  
+  Serial.println("=== PSRAM Test End ===\n");
+}
+
 #define LED_PIN 35        // AtomS3R内蔵LED
 #define NUM_LEDS 1
 #define BUTTON_PIN 41     // AtomS3Rボタン
@@ -48,11 +101,11 @@ void playOpeningAnimation() {
     
     Serial.println("[Opening] Loading frame " + String(frame) + ": " + String(filename));
     
-    // PSRamFSから画像ファイルを読み込み
-    File jpegFile = PSRamFS.open(filename, "r");
+    // LittleFSから画像ファイルを読み込み
+    File jpegFile = LittleFS.open(filename, "r");
     if (jpegFile) {
       size_t fileSize = jpegFile.size();
-      Serial.println("[Opening] File size: " + String(fileSize) + " bytes");
+      // Serial.println("[Opening] File size: " + String(fileSize) + " bytes");
       
       // ファイル全体をメモリに読み込み
       uint8_t* jpegData = (uint8_t*)malloc(fileSize);
@@ -61,22 +114,27 @@ void playOpeningAnimation() {
         jpegFile.close();
         
         if (bytesRead == fileSize) {
-          // JPEG画像をデコードして表示
-          uint16_t w = 0, h = 0;
-          TJpgDec.getJpgSize(&w, &h, jpegData, fileSize);
-          Serial.println("[Opening] Image size: " + String(w) + "x" + String(h));
-          
-          // 画面中央に配置
-          int16_t x = (M5.Display.width() - w) / 2;
-          int16_t y = (M5.Display.height() - h) / 2;
-          
-          // 背景をクリア
-          M5.Display.fillScreen(TFT_BLACK);
-          
-          // JPEG画像を表示
-          TJpgDec.drawJpg(x, y, jpegData, fileSize);
-          
-          Serial.println("[Opening] Frame " + String(frame) + " displayed");
+          // ファイルがJPEGかを判定
+          if (fileSize >= 2 && jpegData[0] == 0xFF && jpegData[1] == 0xD8) {
+            // JPEG形式の場合
+            uint16_t w = 0, h = 0;
+            TJpgDec.getJpgSize(&w, &h, jpegData, fileSize);
+            // Serial.println("[Opening] JPEG Image size: " + String(w) + "x" + String(h));
+            
+            // 画面中央に配置
+            int16_t x = (M5.Display.width() - w) / 2;
+            int16_t y = (M5.Display.height() - h) / 2;
+            
+            // 背景をクリア
+            M5.Display.fillScreen(TFT_BLACK);
+            
+            // JPEG画像を表示
+            TJpgDec.drawJpg(x, y, jpegData, fileSize);
+            
+            // Serial.println("[Opening] JPEG Frame " + String(frame) + " displayed");
+          } else {
+            Serial.println("[Opening] Invalid JPEG format detected");
+          }
         } else {
           Serial.println("[Opening] Failed to read file completely");
         }
@@ -130,10 +188,16 @@ void setup() {
   Serial.println("M5.begin() completed");
   delay(500);
   
+  // PSRAMテスト実行
+  testPSRAM();
+  
   // ボタン初期化
   pinMode(BUTTON_PIN, INPUT_PULLUP);
 
   Serial.println("Mounting storage...");
+  
+  // PSRamFS容量を3MBに設定（8MB PSRAMの一部使用）
+  Serial.println("[Storage] Configuring PSRamFS for 3MB capacity...");
   
   // LittleFSの破損を修復するため、一度強制フォーマットを実行
   Serial.println("[Storage] Attempting LittleFS format to fix corruption...");
@@ -142,6 +206,13 @@ void setup() {
     LittleFS.end();
   } else {
     Serial.println("[Storage] LittleFS format failed!");
+  }
+  
+  // PSRamFSを3MB容量で初期化
+  if (PSRamFS.setPartitionSize(3 * 1024 * 1024) && PSRamFS.begin()) {
+    Serial.println("[Storage] PSRamFS initialized with 3MB capacity");
+  } else {
+    Serial.println("[Storage] PSRamFS initialization failed, falling back to heap");
   }
   
   const bool storageReady = storageManager.begin();
@@ -154,7 +225,7 @@ void setup() {
   }
 
   if (storageManager.isLittleFsMounted()) {
-    if (configManager.load("/littlefs/config.json")) {
+    if (configManager.load()) {
       Serial.println("[Config] Loaded config.json");
       const auto &cfg = configManager.config();
       Serial.printf("[Config] system.name=%s\n", cfg.system.name.c_str());
@@ -245,13 +316,13 @@ void setup() {
   Serial.println("FastLED disabled (USE_FASTLED not defined)");
 #endif
   
-  // WDTフィード（初期化時間を確保）
-  esp_task_wdt_reset();
-  delay(100);
+  // // WDTフィード（初期化時間を確保）
+  // esp_task_wdt_reset();
+  // delay(100);
   
-  // M5.Display初期化（動作実績のあるアプローチ）
-  Serial.println("=== Starting M5.Display initialization ===");
-  esp_task_wdt_reset();
+  // // M5.Display初期化（動作実績のあるアプローチ）
+  // Serial.println("=== Starting M5.Display initialization ===");
+  // esp_task_wdt_reset();
   
   // Display設定
   bool display_ok = M5.Display.begin();
@@ -266,90 +337,90 @@ void setup() {
   
   // AtomS3R は GC9107 + offset_y=32 が自動適用される想定
   M5.Display.setRotation(0);  // 0度回転
-  M5.Display.setBrightness(200);  // 明度設定（0-255）
+  M5.Display.setBrightness(128);  // 明度設定（0-255）
   M5.Display.fillScreen(TFT_BLACK);
   esp_task_wdt_reset();
   
   Serial.println("Step 2: M5.Display basic setup completed");
   
-  // テスト表示
-  M5.Display.fillScreen(TFT_GREEN);  // Green background
-  delay(200);
+  // // テスト表示
+  // M5.Display.fillScreen(TFT_GREEN);  // Green background
+  // delay(200);
   
-  M5.Display.setTextColor(TFT_BLACK);  // Black text on green
-  M5.Display.setTextSize(2);
-  M5.Display.setTextDatum(MC_DATUM);  // 中央揃え
-  M5.Display.drawString("AtomS3R", 64, 30);
+  // M5.Display.setTextColor(TFT_BLACK);  // Black text on green
+  // M5.Display.setTextSize(2);
+  // M5.Display.setTextDatum(MC_DATUM);  // 中央揃え
+  // M5.Display.drawString("AtomS3R", 64, 30);
   
-  M5.Display.setTextColor(TFT_WHITE);  // White text
-  M5.Display.setTextSize(1);
-  M5.Display.setTextDatum(MC_DATUM);
-  M5.Display.drawString("Display OK!", 64, 60);
-  M5.Display.drawString("M5Unified", 64, 80);
+  // M5.Display.setTextColor(TFT_WHITE);  // White text
+  // M5.Display.setTextSize(1);
+  // M5.Display.setTextDatum(MC_DATUM);
+  // M5.Display.drawString("Display OK!", 64, 60);
+  // M5.Display.drawString("M5Unified", 64, 80);
   
-  // カラーテスト
-  M5.Display.fillRect(10, 100, 20, 20, TFT_RED);     // Red
-  M5.Display.fillRect(40, 100, 20, 20, TFT_GREEN);   // Green  
-  M5.Display.fillRect(70, 100, 20, 20, TFT_BLUE);    // Blue
+  // // カラーテスト
+  // M5.Display.fillRect(10, 100, 20, 20, TFT_RED);     // Red
+  // M5.Display.fillRect(40, 100, 20, 20, TFT_GREEN);   // Green  
+  // M5.Display.fillRect(70, 100, 20, 20, TFT_BLUE);    // Blue
   
-  Serial.println("Step 2: M5.Display test display completed!");
-  Serial.println("=== M5.Display initialization complete ===");
+  // Serial.println("Step 2: M5.Display test display completed!");
+  // Serial.println("=== M5.Display initialization complete ===");
   
-  // PSRamFSテスト用：簡単な画像データを生成して保存
-  Serial.println("[Image Test] Starting image generation test...");
-  if (storageManager.isPsRamFsMounted()) {
-    Serial.println("[Image Test] PSRamFS is mounted - proceeding with test");
+  // // PSRamFSテスト用：簡単な画像データを生成して保存
+  // Serial.println("[Image Test] Starting image generation test...");
+  // if (storageManager.isPsRamFsMounted()) {
+  //   Serial.println("[Image Test] PSRamFS is mounted - proceeding with test");
     
-    // 32x32ピクセルの簡単なテスト画像データを生成（RGB565形式）
-    const int imageWidth = 32;
-    const int imageHeight = 32;
-    const int imageSize = imageWidth * imageHeight * 2; // RGB565は2バイト/ピクセル
+  //   // 32x32ピクセルの簡単なテスト画像データを生成（RGB565形式）
+  //   const int imageWidth = 32;
+  //   const int imageHeight = 32;
+  //   const int imageSize = imageWidth * imageHeight * 2; // RGB565は2バイト/ピクセル
     
-    Serial.println("[Image Test] Allocating memory for " + String(imageSize) + " bytes...");
-    uint16_t* imageData = (uint16_t*)malloc(imageSize);
-    if (imageData) {
-      Serial.println("[Image Test] Memory allocated successfully");
+  //   Serial.println("[Image Test] Allocating memory for " + String(imageSize) + " bytes...");
+  //   uint16_t* imageData = (uint16_t*)malloc(imageSize);
+  //   if (imageData) {
+  //     Serial.println("[Image Test] Memory allocated successfully");
       
-      // カラフルなテストパターンを生成
-      for (int y = 0; y < imageHeight; y++) {
-        for (int x = 0; x < imageWidth; x++) {
-          uint16_t color;
-          if (y < 8) {
-            color = M5.Display.color565(255, 0, 0); // Red
-          } else if (y < 16) {
-            color = M5.Display.color565(0, 255, 0); // Green
-          } else if (y < 24) {
-            color = M5.Display.color565(0, 0, 255); // Blue
-          } else {
-            color = M5.Display.color565(255, 255, 0); // Yellow
-          }
-          imageData[y * imageWidth + x] = color;
-        }
-      }
-      Serial.println("[Image Test] Test pattern generated");
+  //     // カラフルなテストパターンを生成
+  //     for (int y = 0; y < imageHeight; y++) {
+  //       for (int x = 0; x < imageWidth; x++) {
+  //         uint16_t color;
+  //         if (y < 8) {
+  //           color = M5.Display.color565(255, 0, 0); // Red
+  //         } else if (y < 16) {
+  //           color = M5.Display.color565(0, 255, 0); // Green
+  //         } else if (y < 24) {
+  //           color = M5.Display.color565(0, 0, 255); // Blue
+  //         } else {
+  //           color = M5.Display.color565(255, 255, 0); // Yellow
+  //         }
+  //         imageData[y * imageWidth + x] = color;
+  //       }
+  //     }
+  //     Serial.println("[Image Test] Test pattern generated");
       
-      // PSRamFSに保存
-      File testImageFile = PSRamFS.open("/images/test_pattern.rgb565", "w");
-      if (testImageFile) {
-        size_t written = testImageFile.write((uint8_t*)imageData, imageSize);
-        testImageFile.close();
-        Serial.println("[Image Test] Test pattern saved: " + String(written) + " bytes");
+  //     // PSRamFSに保存
+  //     File testImageFile = PSRamFS.open("/images/test_pattern.rgb565", "w");
+  //     if (testImageFile) {
+  //       size_t written = testImageFile.write((uint8_t*)imageData, imageSize);
+  //       testImageFile.close();
+  //       Serial.println("[Image Test] Test pattern saved: " + String(written) + " bytes");
         
-        // すぐに表示テスト
-        M5.Display.pushImage(80, 50, imageWidth, imageHeight, imageData);
-        Serial.println("[Image Test] Test pattern displayed on screen at (80,50)");
-      } else {
-        Serial.println("[Image Test] Failed to create test image file");
-      }
+  //       // すぐに表示テスト
+  //       M5.Display.pushImage(80, 50, imageWidth, imageHeight, imageData);
+  //       Serial.println("[Image Test] Test pattern displayed on screen at (80,50)");
+  //     } else {
+  //       Serial.println("[Image Test] Failed to create test image file");
+  //     }
       
-      free(imageData);
-      Serial.println("[Image Test] Memory freed");
-    } else {
-      Serial.println("[Image Test] Failed to allocate memory for test image");
-    }
-  } else {
-    Serial.println("[Image Test] PSRamFS not mounted - skipping test");
-  }
+  //     free(imageData);
+  //     Serial.println("[Image Test] Memory freed");
+  //   } else {
+  //     Serial.println("[Image Test] Failed to allocate memory for test image");
+  //   }
+  // } else {
+  //   Serial.println("[Image Test] PSRamFS not mounted - skipping test");
+  // }
   
   // Opening連番JPEG表示テスト
   if (storageManager.isPsRamFsMounted()) {
@@ -358,11 +429,64 @@ void setup() {
     // 最初のフレームが存在するかチェック
     if (PSRamFS.exists("/images/opening/001.jpg")) {
       Serial.println("[Opening] Opening animation files found");
-      delay(1000); // 少し待ってからアニメーション開始
+      delay(10); // 少し待ってからアニメーション開始
       playOpeningAnimation();
     } else {
       Serial.println("[Opening] Opening animation files not found in PSRamFS");
-      Serial.println("[Opening] Make sure to upload opening images to data/images/opening/");
+      Serial.println("[Opening] Creating temporary test JPEG files for demonstration...");
+      
+      // テスト用：PSRamFSにopeningディレクトリを作成
+      if (!PSRamFS.exists("/images/opening")) {
+        if (PSRamFS.mkdir("/images/opening")) {
+          Serial.println("[Opening] Created /images/opening directory");
+        }
+      }
+      
+      // // 実際のミニJPEGデータを作成（最小限のJPEGヘッダー + データ）
+      // Serial.println("[Opening] Generating actual JPEG test data...");
+      
+      // // 最小限の有効なJPEGデータを作成（8x8グレースケール）
+      // uint8_t miniJpegTemplate[] = {
+      //   0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01,
+      //   0x01, 0x01, 0x00, 0x48, 0x00, 0x48, 0x00, 0x00, 0xFF, 0xDB, 0x00, 0x43,
+      //   0x00, 0x08, 0x06, 0x06, 0x07, 0x06, 0x05, 0x08, 0x07, 0x07, 0x07, 0x09,
+      //   0x09, 0x08, 0x0A, 0x0C, 0x14, 0x0D, 0x0C, 0x0B, 0x0B, 0x0C, 0x19, 0x12,
+      //   0x13, 0x0F, 0x14, 0x1D, 0x1A, 0x1F, 0x1E, 0x1D, 0x1A, 0x1C, 0x1C, 0x20,
+      //   0x24, 0x2E, 0x27, 0x20, 0x22, 0x2C, 0x23, 0x1C, 0x1C, 0x28, 0x37, 0x29,
+      //   0x2C, 0x30, 0x31, 0x34, 0x34, 0x34, 0x1F, 0x27, 0x39, 0x3D, 0x38, 0x32,
+      //   0x3C, 0x2E, 0x33, 0x34, 0x32, 0xFF, 0xC0, 0x00, 0x11, 0x08, 0x00, 0x20,
+      //   0x00, 0x20, 0x01, 0x01, 0x11, 0x00, 0x02, 0x11, 0x01, 0x03, 0x11, 0x01,
+      //   0xFF, 0xC4, 0x00, 0x14, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      //   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0xFF, 0xC4,
+      //   0x00, 0x14, 0x10, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      //   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xDA, 0x00, 0x0C,
+      //   0x03, 0x01, 0x00, 0x02, 0x11, 0x03, 0x11, 0x00, 0x3F, 0x00, 0xAA, 0xFF, 0xD9
+      // };
+      
+      // for (int i = 1; i <= 3; i++) {
+      //   char filename[64];
+      //   snprintf(filename, sizeof(filename), "/images/opening/%03d.jpg", i);
+        
+      //   File jpegFile = PSRamFS.open(filename, "w");
+      //   if (jpegFile) {
+      //     // 基本のJPEGデータをコピー
+      //     uint8_t* jpegData = (uint8_t*)malloc(sizeof(miniJpegTemplate));
+      //     memcpy(jpegData, miniJpegTemplate, sizeof(miniJpegTemplate));
+          
+      //     // データを少し変更してフレームごとに違いを作る
+      //     jpegData[143] = 0xAA + (i * 0x11); // 最後のデータバイトを変更
+          
+      //     jpegFile.write(jpegData, sizeof(miniJpegTemplate));
+      //     jpegFile.close();
+      //     free(jpegData);
+          
+      //     Serial.println("[Opening] Created mini JPEG file: " + String(filename) + " (" + String(sizeof(miniJpegTemplate)) + " bytes)");
+      //   }
+      // }
+      
+      // Serial.println("[Opening] Test files created, starting demonstration...");
+      // delay(1000);
+      playOpeningAnimation();
     }
   }
   
