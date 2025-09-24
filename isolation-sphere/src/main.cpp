@@ -6,7 +6,10 @@
 #include <esp_task_wdt.h>
 #include <TJpg_Decoder.h>
 
+#include "boot/BootOrchestrator.h"
 #include "config/ConfigManager.h"
+#include "core/CoreTasks.h"
+#include "core/SharedState.h"
 #include "storage/StorageManager.h"
 #include "storage/StorageStager.h"
 
@@ -72,6 +75,21 @@ void testPSRAM() {
 
 CRGB leds[NUM_LEDS];
 StorageManager storageManager;
+SharedState sharedState;
+
+namespace {
+
+CoreTask::TaskConfig makeTaskConfig(const char *name, int coreId, std::uint32_t priority, std::uint32_t stackSize, std::uint32_t intervalMs) {
+  CoreTask::TaskConfig cfg;
+  cfg.name = name;
+  cfg.coreId = coreId;
+  cfg.priority = priority;
+  cfg.stackSize = stackSize;
+  cfg.loopIntervalMs = intervalMs;
+  return cfg;
+}
+
+}
 
 // TJpg_Decoder用のコールバック関数
 bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap) {
@@ -169,6 +187,8 @@ void playOpeningAnimation() {
   M5.Display.fillScreen(TFT_BLACK);
 }
 ConfigManager configManager;
+Core0Task core0Task(makeTaskConfig("Core0Task", 0, 4, 4096, 50), configManager, storageManager, sharedState);
+Core1Task core1Task(makeTaskConfig("Core1Task", 1, 4, 4096, 20), sharedState);
 
 #ifndef UNIT_TEST
 
@@ -215,66 +235,40 @@ void setup() {
     Serial.println("[Storage] PSRamFS initialization failed, falling back to heap");
   }
   
-  const bool storageReady = storageManager.begin();
-  Serial.println(storageManager.isLittleFsMounted() ? "[Storage] LittleFS mounted"
-                                                    : "[Storage] LittleFS not mounted");
-  Serial.println(storageManager.isPsRamFsMounted() ? "[Storage] PSRamFS mounted"
-                                                   : "[Storage] PSRamFS not mounted");
-  if (!storageReady) {
-    Serial.println("[Storage] Initialization incomplete - subsequent features may be limited");
-  }
-
-  if (storageManager.isLittleFsMounted()) {
-    if (configManager.load()) {
-      Serial.println("[Config] Loaded config.json");
-      const auto &cfg = configManager.config();
-      Serial.printf("[Config] system.name=%s\n", cfg.system.name.c_str());
-      Serial.printf("[Config] system.psram=%s debug=%s\n",
-                    cfg.system.psramEnabled ? "true" : "false",
-                    cfg.system.debug ? "true" : "false");
-      Serial.printf("[Config] display=%ux%u rot=%d offset=(%d,%d) depth=%u switch=%s\n",
-                    cfg.display.width,
-                    cfg.display.height,
-                    cfg.display.rotation,
-                    cfg.display.offsetX,
-                    cfg.display.offsetY,
-                    cfg.display.colorDepth,
-                    cfg.display.displaySwitch ? "on" : "off");
-      Serial.printf("[Config] wifi.ssid=%s retries=%u\n",
-                    cfg.wifi.ssid.c_str(),
-                    cfg.wifi.maxRetries);
-      Serial.printf("[Config] mqtt.enabled=%s broker=%s:%u\n",
-                    cfg.mqtt.enabled ? "true" : "false",
-                    cfg.mqtt.broker.c_str(),
-                    cfg.mqtt.port);
-      Serial.printf("[Config] mqtt.topics ui=%s status=%s image=%s\n",
-                    cfg.mqtt.topicUi.c_str(),
-                    cfg.mqtt.topicStatus.c_str(),
-                    cfg.mqtt.topicImage.c_str());
-    } else {
-      Serial.println("[Config] Failed to load config.json");
+  BootOrchestrator::Callbacks bootCallbacks;
+  bootCallbacks.onStorageReady = [&]() {
+    Serial.println(storageManager.isLittleFsMounted() ? "[Storage] LittleFS mounted"
+                                                      : "[Storage] LittleFS not mounted");
+    Serial.println(storageManager.isPsRamFsMounted() ? "[Storage] PSRamFS mounted"
+                                                     : "[Storage] PSRamFS not mounted");
+    if (storageManager.isLittleFsMounted()) {
+      Serial.println("[Config] Core0Task will load config.json asynchronously");
     }
-  }
+  };
+  bootCallbacks.stageAssets = [&]() {
+    bool success = true;
 
-  // LittleFSが利用できない場合でも、PSRamFSだけで動作するよう改善
-  if (storageManager.isPsRamFsMounted()) {
-    Serial.println("[Storage] PSRamFS available - ready for runtime asset loading");
-    
-    // PSRamFSに基本ディレクトリ構造を作成
+    if (!storageManager.isPsRamFsMounted()) {
+      Serial.println("[Storage] PSRamFS unavailable - skipping asset staging");
+      return success;
+    }
+
     File root = PSRamFS.open("/");
     if (!root || !root.isDirectory()) {
       Serial.println("[Storage] Warning: PSRamFS root not accessible");
+      success = false;
     } else {
-      // 画像用ディレクトリを作成
       if (!PSRamFS.exists("/images")) {
         if (PSRamFS.mkdir("/images")) {
           Serial.println("[Storage] Created /images directory in PSRamFS");
+        } else {
+          Serial.println("[Storage] Failed to create /images directory in PSRamFS");
+          success = false;
         }
       }
       root.close();
     }
-    
-    // LittleFSが利用可能な場合のみアセットミラーリングを実行
+
     if (storageManager.isLittleFsMounted()) {
       StorageStager stager(StorageStager::makeSourceFsOps(LittleFS),
                            StorageStager::makeDestinationFsOps(PSRamFS, LittleFS));
@@ -282,10 +276,20 @@ void setup() {
         Serial.println("[Storage] Assets mirrored from LittleFS to PSRamFS");
       } else {
         Serial.println("[Storage] Asset mirroring failed - will use PSRamFS only");
+        success = false;
       }
     } else {
       Serial.println("[Storage] LittleFS unavailable - using PSRamFS only mode");
     }
+
+    return success;
+  };
+
+  BootOrchestrator bootOrchestrator(storageManager, configManager, sharedState, bootCallbacks);
+  if (!bootOrchestrator.run()) {
+    Serial.println("[Boot] Boot orchestrator failed - storage or staging incomplete");
+  } else if (!bootOrchestrator.hasLoadedConfig()) {
+    Serial.println("[Boot] Config not loaded during boot");
   }
   
   // FastLED初期化（一時的に無効化してSPI競合を回避）
@@ -489,8 +493,15 @@ void setup() {
       playOpeningAnimation();
     }
   }
-  
+
   // デバイス情報を表示
+  if (!core0Task.isStarted() && !core0Task.start()) {
+    Serial.println("[Core0] Failed to start task");
+  }
+  if (!core1Task.isStarted() && !core1Task.start()) {
+    Serial.println("[Core1] Failed to start task");
+  }
+
   Serial.println("Device Info:");
   Serial.println("- Heap free: " + String(ESP.getFreeHeap()));
   Serial.println("- PSRAM size: " + String(ESP.getPsramSize()));

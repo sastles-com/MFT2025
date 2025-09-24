@@ -1,10 +1,10 @@
 # 📝 Isolation Sphere 実装タスク表（優先度付き）
 
 ## 起動シーケンス
-- [P1] M5Unified のライフサイクル（`M5.begin()`）と LittleFS を統合初期化
-- [P1] LittleFS の初期化処理を実装
-- [P1] `config.json` 読み込み機能を実装
-  - [P1] `ArduinoJson` ベースの設定ローダーを整備
+- [x] [P1] M5Unified のライフサイクル（`M5.begin()`）と LittleFS を統合初期化
+- [x] [P1] LittleFS の初期化処理を実装
+- [x] [P1] `config.json` 読み込み機能を実装
+  - [x] [P1] `ArduinoJson` ベースの設定ローダーを整備
 - [P1] `display/switch` 判定 → LCD表示のON/OFF制御 
 - [P1] 起動音をブザーで再生
 - [P1] オープニングムービー（LittleFS内JPEG連番）の再生処理を実装 

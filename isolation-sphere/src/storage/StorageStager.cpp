@@ -213,25 +213,33 @@ bool StorageStager::stageDirectoryRecursive(const std::string &path) {
   }
 
   auto entries = source_.list(path.c_str());
+
   for (const auto &entry : entries) {
-    const auto srcPath = joinPath(path, entry.name);
     if (entry.isDirectory) {
-      if (!ensureDestinationDir(srcPath)) {
-        return false;
-      }
-      if (!stageDirectoryRecursive(srcPath)) {
-        return false;
-      }
-    } else {
-      if (!destination_.copyFile) {
-        return false;
-      }
-      if (!ensureDestinationDir(parentPath(srcPath))) {
-        return false;
-      }
-      if (!destination_.copyFile(srcPath.c_str(), srcPath.c_str())) {
-        return false;
-      }
+      continue;
+    }
+    const auto srcPath = joinPath(path, entry.name);
+    if (!destination_.copyFile) {
+      return false;
+    }
+    if (!ensureDestinationDir(parentPath(srcPath))) {
+      return false;
+    }
+    if (!destination_.copyFile(srcPath.c_str(), srcPath.c_str())) {
+      return false;
+    }
+  }
+
+  for (const auto &entry : entries) {
+    if (!entry.isDirectory) {
+      continue;
+    }
+    const auto srcPath = joinPath(path, entry.name);
+    if (!ensureDestinationDir(srcPath)) {
+      return false;
+    }
+    if (!stageDirectoryRecursive(srcPath)) {
+      return false;
     }
   }
   return true;
