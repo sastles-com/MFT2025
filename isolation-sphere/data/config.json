@@ -31,7 +31,7 @@
   },
   "wifi": {
     "ssid": "IsolationSphere-Direct",
-    "password": "sastle1234",
+    "password": "",
     "max_retries": 5
   },
   "udp": {
@@ -66,6 +66,11 @@
   "buzzer": {
     "enabled": true,
     "volume": 20
+  },
+  "ota": {
+    "enabled": true,
+    "username": "admin",
+    "password": "sphere"
   },
   "led": {
     "enabled": true,

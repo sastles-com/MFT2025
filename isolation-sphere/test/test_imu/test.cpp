@@ -30,6 +30,10 @@ void test_imu_service_reads_quaternion() {
   expected.qx = 0.0f;
   expected.qy = 0.5f;
   expected.qz = 0.5f;
+  expected.ax = 0.1f;
+  expected.ay = 0.2f;
+  expected.az = 9.8f;
+  expected.accelMagnitudeMps2 = 9.802f;
   expected.timestampMs = 123;
 
   ImuService::Hooks hooks;
@@ -48,6 +52,7 @@ void test_imu_service_reads_quaternion() {
   TEST_ASSERT_FLOAT_WITHIN(0.0001f, expected.qx, actual.qx);
   TEST_ASSERT_FLOAT_WITHIN(0.0001f, expected.qy, actual.qy);
   TEST_ASSERT_FLOAT_WITHIN(0.0001f, expected.qz, actual.qz);
+  TEST_ASSERT_FLOAT_WITHIN(0.0001f, expected.accelMagnitudeMps2, actual.accelMagnitudeMps2);
   TEST_ASSERT_EQUAL_UINT32(expected.timestampMs, actual.timestampMs);
 }
 
@@ -58,6 +63,10 @@ void test_shared_state_stores_imu_reading() {
   reading.qx = 0.1f;
   reading.qy = 0.2f;
   reading.qz = 0.3f;
+  reading.ax = 0.4f;
+  reading.ay = 0.5f;
+  reading.az = 9.0f;
+  reading.accelMagnitudeMps2 = 9.03f;
   reading.timestampMs = 456;
 
   state.updateImuReading(reading);
@@ -65,7 +74,17 @@ void test_shared_state_stores_imu_reading() {
   ImuService::Reading copy;
   TEST_ASSERT_TRUE(state.getImuReading(copy));
   TEST_ASSERT_FLOAT_WITHIN(0.0001f, reading.qw, copy.qw);
+  TEST_ASSERT_FLOAT_WITHIN(0.0001f, reading.ax, copy.ax);
   TEST_ASSERT_EQUAL_UINT32(reading.timestampMs, copy.timestampMs);
+}
+
+void test_shared_state_ui_mode() {
+  SharedState state;
+  bool active = false;
+  TEST_ASSERT_FALSE(state.getUiMode(active));
+  state.setUiMode(true);
+  TEST_ASSERT_TRUE(state.getUiMode(active));
+  TEST_ASSERT_TRUE(active);
 }
 
 void setUp() {}
@@ -77,6 +96,7 @@ int runUnityTests() {
   RUN_TEST(test_imu_service_read_requires_initialization);
   RUN_TEST(test_imu_service_reads_quaternion);
   RUN_TEST(test_shared_state_stores_imu_reading);
+  RUN_TEST(test_shared_state_ui_mode);
   return UNITY_END();
 }
 

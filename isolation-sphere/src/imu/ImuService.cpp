@@ -128,6 +128,11 @@ void ImuService::ensureDefaultHooks() {
       out.qx = sr * cp * cy - cr * sp * sy;
       out.qy = cr * sp * cy + sr * cp * sy;
       out.qz = cr * cp * sy - sr * sp * cy;
+      constexpr float kGravity = 9.80665f;
+      out.ax = ax * kGravity;
+      out.ay = ay * kGravity;
+      out.az = az * kGravity;
+      out.accelMagnitudeMps2 = sqrtf(out.ax * out.ax + out.ay * out.ay + out.az * out.az);
       out.timestampMs = millis();
       processCalibrationTick();
       return true;
@@ -162,6 +167,8 @@ void ImuService::ensureDefaultHooks() {
       out.qx = quat.x();
       out.qy = quat.y();
       out.qz = quat.z();
+      out.ax = out.ay = out.az = 0.0f;
+      out.accelMagnitudeMps2 = 0.0f;
       out.timestampMs = millis();
       return true;
     };

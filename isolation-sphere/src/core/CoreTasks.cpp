@@ -1,6 +1,8 @@
 #include "core/CoreTasks.h"
 
 #include <Arduino.h>
+#include <ESP.h>
+#include <cmath>
 #include <utility>
 
 namespace {
@@ -28,6 +30,25 @@ void Core0Task::loop() {
       Serial.println("[Core0] Config loaded and shared");
     }
   }
+  if (configLoaded_) {
+    if (!otaInitialized_) {
+      uint32_t now = millis();
+      if (now >= nextOtaRetryMs_) {
+        if (otaService_.begin(configManager_.config())) {
+          otaInitialized_ = true;
+        } else {
+          nextOtaRetryMs_ = now + 5000;
+        }
+      }
+    } else {
+      otaService_.loop();
+      if (otaService_.shouldReboot()) {
+        Serial.println("[OTA] Rebooting to finalize update");
+        delay(500);
+        ESP.restart();
+      }
+    }
+  }
   sleep(config().loopIntervalMs);
 }
 
@@ -50,6 +71,7 @@ void Core1Task::requestImuCalibration(std::uint8_t seconds) {
 
 void Core1Task::setup() {
   Serial.println("[Core1] Task setup complete");
+  sharedState_.setUiMode(false);
 }
 
 void Core1Task::loop() {
@@ -72,6 +94,23 @@ void Core1Task::loop() {
 
       imuIntervalMs_ = cfg.imu.updateIntervalMs == 0 ? 0 : cfg.imu.updateIntervalMs;
       imuDebugLogging_ = cfg.imu.gestureDebugLog;
+      imuConfig_ = cfg.imu;
+      gestureUiModeEnabled_ = cfg.imu.gestureUiMode;
+      gestureThresholdMps2_ = (cfg.imu.gestureThresholdMps2 > 0.0f)
+                                  ? cfg.imu.gestureThresholdMps2
+                                  : kDefaultShakeThresholdMps2_;
+      gestureWindowMs_ = (cfg.imu.gestureWindowMs > 0)
+                             ? cfg.imu.gestureWindowMs
+                             : kDefaultShakeWindowMs_;
+      if (!gestureUiModeEnabled_) {
+        shakeEventCount_ = 0;
+        shakeFirstEventMs_ = 0;
+        shakeLastPeakMs_ = 0;
+        if (uiModeActive_) {
+          uiModeActive_ = false;
+          sharedState_.setUiMode(uiModeActive_);
+        }
+      }
 
       if (!imuInitialized_ && now >= nextImuRetryMs_) {
         Serial.println("[Core1] Initializing IMU...");
@@ -93,6 +132,10 @@ void Core1Task::loop() {
       imuInitialized_ = false;
       nextImuRetryMs_ = 0;
       imuDebugLogging_ = false;
+      gestureUiModeEnabled_ = false;
+      shakeEventCount_ = 0;
+      shakeFirstEventMs_ = 0;
+      shakeLastPeakMs_ = 0;
     }
   }
 
@@ -101,6 +144,9 @@ void Core1Task::loop() {
       ImuService::Reading reading;
       if (imuService_.read(reading)) {
         sharedState_.updateImuReading(reading);
+        if (gestureUiModeEnabled_) {
+          handleShakeGesture(reading);
+        }
         if (imuDebugLogging_) {
           Serial.printf("[Core1][IMU] q=(%.3f, %.3f, %.3f, %.3f) ts=%lu\n",
                         reading.qw,
@@ -116,4 +162,46 @@ void Core1Task::loop() {
     }
   }
   sleep(config().loopIntervalMs);
+}
+
+void Core1Task::handleShakeGesture(const ImuService::Reading &reading) {
+  constexpr float kGravity = 9.80665f;
+  const float magnitude = reading.accelMagnitudeMps2;
+  if (!std::isfinite(magnitude)) {
+    return;
+  }
+
+  const float linearAccel = fabsf(magnitude - kGravity);
+  if (imuDebugLogging_) {
+    Serial.printf("[Core1][IMU] linear accel %.3f m/s^2\n", linearAccel);
+  }
+
+  if (linearAccel < gestureThresholdMps2_) {
+    return;
+  }
+
+  const uint32_t now = reading.timestampMs != 0 ? reading.timestampMs : millis();
+  if (now - shakeLastPeakMs_ < kShakeRefractoryMs_) {
+    return;
+  }
+
+  shakeLastPeakMs_ = now;
+  if (shakeEventCount_ == 0 || (now - shakeFirstEventMs_) > gestureWindowMs_) {
+    shakeEventCount_ = 0;
+    shakeFirstEventMs_ = now;
+  }
+
+  ++shakeEventCount_;
+  if (imuDebugLogging_) {
+    Serial.printf("[Core1][IMU] shake event count=%u\n", static_cast<unsigned>(shakeEventCount_));
+  }
+
+  if (shakeEventCount_ >= 2) {
+    shakeEventCount_ = 0;
+    shakeFirstEventMs_ = 0;
+    uiModeActive_ = !uiModeActive_;
+    sharedState_.setUiMode(uiModeActive_);
+    Serial.printf("[Core1][IMU] Shake gesture detected -> UI mode %s\n",
+                  uiModeActive_ ? "ON" : "OFF");
+  }
 }

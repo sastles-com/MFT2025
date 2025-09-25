@@ -17,6 +17,10 @@ class ImuService {
     float qx = 0.0f;
     float qy = 0.0f;
     float qz = 0.0f;
+    float ax = 0.0f;
+    float ay = 0.0f;
+    float az = 0.0f;
+    float accelMagnitudeMps2 = 0.0f;
     std::uint32_t timestampMs = 0;
   };
 

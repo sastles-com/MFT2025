@@ -55,6 +55,12 @@ class ConfigManager {
     std::uint32_t updateIntervalMs = 33;
   };
 
+  struct OtaConfig {
+    bool enabled = false;
+    std::string username;
+    std::string password;
+  };
+
   struct Config {
     SystemConfig system;
     DisplayConfig display;
@@ -62,6 +68,7 @@ class ConfigManager {
     MqttConfig mqtt;
     BuzzerConfig buzzer;
     ImuConfig imu;
+    OtaConfig ota;
   };
 
   explicit ConfigManager(FsProvider provider = FsProvider{});

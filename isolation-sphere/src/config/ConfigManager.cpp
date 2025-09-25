@@ -79,6 +79,15 @@ bool ConfigManager::load(const char *path) {
     config_.imu = ConfigManager::ImuConfig{};
   }
 
+  const JsonVariantConst ota = doc["ota"];
+  if (!ota.isNull()) {
+    config_.ota.enabled = ota["enabled"].as<bool>();
+    config_.ota.username = ota["username"].as<const char *>() ? ota["username"].as<const char *>() : "";
+    config_.ota.password = ota["password"].as<const char *>() ? ota["password"].as<const char *>() : "";
+  } else {
+    config_.ota = ConfigManager::OtaConfig{};
+  }
+
   loaded_ = true;
   return true;
 }

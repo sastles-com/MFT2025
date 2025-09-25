@@ -198,6 +198,27 @@ pio test -e atoms3r
 pio test -e atoms3r -f test_config
 ```
 
+## 🔄 OTAアップデート
+
+### ファームウェア（`/update`）
+
+1. `config.json` の `ota.enabled` を `true` にし、SSID/パスワードを設定してデバイスを再起動。
+2. シリアルモニタに `OTA Service started. http://<IP>/ (user:admin)` が表示されたら、PC/スマホを同じネットワークに接続。
+3. ブラウザで `http://<IP>/update` へアクセスし、Basic認証（デフォルト: `admin` / `sphere`）を通過。
+4. `pio run -e atoms3r_bmi270` 等で生成される `firmware.bin` を指定してアップロード。完了後に自動で再起動します。
+
+### LittleFSアセット（`/uploadfs`）
+
+1. PC側で LittleFS イメージを生成:
+   ```bash
+   pio run -t buildfs -e atoms3r_bmi270
+   ```
+   生成物は `.pio/build/atoms3r_bmi270/littlefs.bin` に出力されます。
+2. ブラウザで `http://<IP>/uploadfs` にアクセス（同じBasic認証が適用されます）。
+3. 表示されるフォームから `littlefs.bin` を選択してアップロード。成功メッセージが表示されたら数秒後に再起動します。
+
+> ⚠️ **注意**: `/uploadfs` はバイナリ1ファイルのみ受け付けます。フォルダや複数ファイルを直接アップロードすることはできません。アセットを更新する際は必ず `buildfs` で新しい LittleFS イメージ（`.bin`）を生成してください。
+
 ### デバッグ
 
 ```bash

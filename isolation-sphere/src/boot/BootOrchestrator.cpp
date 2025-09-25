@@ -37,13 +37,6 @@ bool BootOrchestrator::run() {
     services_.playStartupTone(configCopy);
   }
 
-  if (hasConfig) {
-    shared_.updateConfig(configCopy);
-    if (services_.onConfigReady) {
-      services_.onConfigReady(configCopy);
-    }
-  }
-
   if (callbacks_.stageAssets) {
     if (!callbacks_.stageAssets()) {
       return false;
@@ -58,6 +51,9 @@ bool BootOrchestrator::run() {
     }
 
     shared_.updateConfig(configCopy);
+    if (services_.onConfigReady) {
+      services_.onConfigReady(configCopy);
+    }
     loadedConfig_ = true;
   }
 

@@ -68,3 +68,20 @@ bool SharedState::getImuReading(ImuService::Reading &out) const {
   unlock();
   return available;
 }
+
+void SharedState::setUiMode(bool active) {
+  lock();
+  uiModeActive_ = active;
+  hasUiMode_ = true;
+  unlock();
+}
+
+bool SharedState::getUiMode(bool &active) const {
+  lock();
+  bool available = hasUiMode_;
+  if (available) {
+    active = uiModeActive_;
+  }
+  unlock();
+  return available;
+}

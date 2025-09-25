@@ -21,6 +21,9 @@ class SharedState {
   void updateImuReading(const ImuService::Reading &reading);
   bool getImuReading(ImuService::Reading &out) const;
 
+  void setUiMode(bool active);
+  bool getUiMode(bool &active) const;
+
  private:
   void lock() const;
   void unlock() const;
@@ -34,4 +37,6 @@ class SharedState {
   bool hasConfig_ = false;
   ImuService::Reading imuReading_{};
   bool hasImuReading_ = false;
+  bool uiModeActive_ = false;
+  bool hasUiMode_ = false;
 };

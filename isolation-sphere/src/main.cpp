@@ -179,7 +179,7 @@ float quaternionToYaw(const ImuService::Reading &r) {
   return atan2f(t3, t4);
 }
 
-void drawImuVisualization(const ImuService::Reading &reading) {
+void drawImuVisualization(const ImuService::Reading &reading, bool highlight) {
   static uint32_t lastDrawMs = 0;
   const uint32_t now = millis();
   if (now - lastDrawMs < 80) {
@@ -236,7 +236,8 @@ void drawImuVisualization(const ImuService::Reading &reading) {
   auto p0 = rotateYaw(0.0f, -pointerLen);
   auto p1 = rotateYaw(-12.0f, pointerLen);
   auto p2 = rotateYaw(12.0f, pointerLen);
-  M5.Display.fillTriangle(p0.first, p0.second, p1.first, p1.second, p2.first, p2.second, TFT_CYAN);
+  uint32_t pointerColor = highlight ? TFT_RED : TFT_CYAN;
+  M5.Display.fillTriangle(p0.first, p0.second, p1.first, p1.second, p2.first, p2.second, pointerColor);
 
   M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
   M5.Display.setTextSize(1);
@@ -762,6 +763,8 @@ void loop() {
   static uint32_t lastImuOverlayMs = 0;
   if (millis() - lastImuOverlayMs >= 200) {
     ImuService::Reading imuReading;
+    bool uiActive = false;
+    bool uiStateKnown = sharedState.getUiMode(uiActive);
     if (sharedState.getImuReading(imuReading)) {
       lastImuOverlayMs = millis();
       const int overlayWidth = M5.Display.width();
@@ -773,7 +776,10 @@ void loop() {
       M5.Display.printf("qw:%6.3f qx:%6.3f\n", imuReading.qw, imuReading.qx);
       M5.Display.printf("qy:%6.3f qz:%6.3f\n", imuReading.qy, imuReading.qz);
       M5.Display.printf("ts:%lu\n", static_cast<unsigned long>(imuReading.timestampMs));
-      drawImuVisualization(imuReading);
+      if (uiStateKnown) {
+        M5.Display.printf("UI:%s\n", uiActive ? "ON" : "OFF");
+      }
+      drawImuVisualization(imuReading, uiActive);
     }
   }
   

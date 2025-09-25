@@ -5,9 +5,11 @@
 - [x] [P1] LittleFS の初期化処理を実装
 - [x] [P1] `config.json` 読み込み機能を実装
   - [x] [P1] `ArduinoJson` ベースの設定ローダーを整備
-- [P1] `display/switch` 判定 → LCD表示のON/OFF制御 
-- [P1] 起動音をブザーで再生
-- [P1] オープニングムービー（LittleFS内JPEG連番）の再生処理を実装 
+- [x] [P1] `display/switch` 判定 → LCD表示のON/OFF制御 
+- [x] [P1] 起動音をブザーで再生
+- [x] [P1] オープニングムービー（LittleFS内JPEG連番）の再生処理を実装 
+- [x] [P1] 内蔵 IMU（BMI270+BMM150）を M5Unified で初期化し、ストレージ初期化より前に完了させる
+- [x] [P1] IMU オフセットを NVS から読み込み、未保存時は起動直後に自動キャリブレーション開始
 - [P1] 起動完了後に LCD に `"Main System Ready"` を表示
 - [P2] LittleFS からオープニング／デモムービーを `ESP32-PSRamFS` RAMDisk にコピーするワークフローの検討
   - [P2] `ESP32-PSRamFS` の初期化サンプルを移植して `psramfs.begin()` を実装
@@ -21,16 +23,17 @@
 
 ## LittleFS，RAMDisk
 - [P1] LittleFS の初期化・ 3MB 目安の領域を確保（`board_build.partitions` を確認）
-- [P2] `ESP32-PSRamFS` RAMDisk 容量確保（3MB 目安）
-  - [P2] 起動時に Images フォルダの内容を LittleFS → PSRamFS にコピー
+- [x] [P2] `ESP32-PSRamFS` RAMDisk 容量確保（3MB 目安）
+  - [x] [P2] 起動時に Images フォルダの内容を LittleFS → PSRamFS にコピー
   - [P2] `File` API 互換ラッパーで RAMDisk から JPEG 連番を読み込み、`LovyanGFX` / `TJpg_Decoder` に渡すルーチンを検討
 
 
 
 ## ディスプレイ制御
-- [P1] `M5Unified` + `M5GFX` / `LovyanGFX` を用いた LCD 初期化 
+- [x] [P1] `M5Unified` + `M5GFX` / `LovyanGFX` を用いた LCD 初期化 
 - [P1] `config.json` から解像度 / 回転 / カラーデプスを設定
-- [P1] JPEG再生機能（LittleFS + `TJpg_Decoder`）を実装 
+- [x] [P1] JPEG再生機能（LittleFS + `TJpg_Decoder`）を実装 
+- [x] [P1] LCD に四元数数値と姿勢インジケータ（ホライゾン＋三角マーカー）を描画して IMU の状態を可視化
 - [P2] UDP経由のJPEGフレーム受信・表示処理を実装
 - [P2] ダブルバッファ / リングバッファの比較・評価
 
@@ -56,14 +59,15 @@
   - [P1] uv座標を使って，画像上のRGB値を取得
 
 ## IMU制御
-- [P1] `Adafruit_BNO055` ライブラリでクォータニオンを取得 
-- [P1] 30Hz以上で姿勢更新ループを実装 
-- [P2] 「強く2回振る」でUIモード遷移 (LCDにSHAKE表示)（`Adafruit_BNO055::getEvent` ベース） 
-- [P2] UIモード時 → 回転操作でUI制御
+- [x] [P1] BMI270+BMM150 を M5Unified + Madgwick で駆動し、30Hz 目標でクォータニオンを取得
+- [x] [P1] IMU 読み取り結果を共有ステートへ配布し、LCD 表示や姿勢インジケータに反映
+- [x] [P2] 「強く2回振る」でUIモード遷移 (LCDにSHAKE表示)（`M5.Imu` ベース） 
+- [ ] [P2] UIモード時 → 回転操作でUI制御
+- [ ] [P2] IMU ドリフト量とキャリブレーション手順の最適化を評価
 
 ## ブザー制御
-- [P1] `buzzer_manager.c / .h` を組み込み（`M5Unified::Speaker` 連携）
-- [P1] 効果音APIを統合（起動音 / 成功音 / エラー音 / 通知音 / シャットダウン音）
+- [x] [P1] `buzzer_manager.c / .h` を組み込み（`M5Unified::Speaker` 連携）
+- [x] [P1] 効果音APIを統合（起動音 / 成功音 / エラー音 / 通知音 / シャットダウン音）
 - [P2] 音量制御・ミュート制御を `config.json` に対応（`M5Unified::Speaker`）
 - [P2] Core1 に固定して並列再生を実装
 
@@ -89,10 +93,10 @@
   - [P1] `AsyncUDP` / `ESPAsyncUDP` の利用を検討し、UDP ストリーム処理を非同期化
 
 ## OTA アップデート
-- [P1] `AsyncTCP` + `ESP Async WebServer` を導入し、OTA 用の HTTPS/HTTP サーバを起動
-- [P1] `AsyncElegantOTA` を組み込み、ブラウザ経由で `ota_0` / `ota_1` にファーム更新
-- [P1] Basic 認証・CSRF 防止などアップロード保護を設定（資格情報は `config.json`）
-- [P2] OTA 実行後に自動リブートし、動作確認フィードバック（MQTT 通知 / LCD 表示）を実装
+- [x] [P1] `AsyncTCP` + `ESP Async WebServer` を導入し、OTA 用の HTTPS/HTTP サーバを起動
+- [x] [P1] `ElegantOTA` (async モード) を組み込み、ブラウザ経由で `ota_0` / `ota_1` にファーム更新
+- [x] [P1] Basic 認証・CSRF 防止などアップロード保護を設定（資格情報は `config.json`）
+- [x] [P2] OTA 実行後に自動リブートし、動作確認フィードバック（MQTT 通知 / LCD 表示）を実装
 - [P2] バッテリー駆動時の中断対策としてロールバック条件を検討（起動確認まで旧パーティション維持）
 
 ## マルチコア設計
