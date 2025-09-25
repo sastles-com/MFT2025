@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <FS.h>
+#include <esp_task_wdt.h>
 
 #include <vector>
 
@@ -215,6 +216,7 @@ bool StorageStager::stageDirectoryRecursive(const std::string &path) {
   auto entries = source_.list(path.c_str());
 
   for (const auto &entry : entries) {
+    esp_task_wdt_reset();
     if (entry.isDirectory) {
       continue;
     }
@@ -231,6 +233,7 @@ bool StorageStager::stageDirectoryRecursive(const std::string &path) {
   }
 
   for (const auto &entry : entries) {
+    esp_task_wdt_reset();
     if (!entry.isDirectory) {
       continue;
     }

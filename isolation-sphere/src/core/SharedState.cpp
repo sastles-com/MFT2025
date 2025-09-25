@@ -51,3 +51,20 @@ bool SharedState::getConfigCopy(ConfigManager::Config &out) const {
   unlock();
   return available;
 }
+
+void SharedState::updateImuReading(const ImuService::Reading &reading) {
+  lock();
+  imuReading_ = reading;
+  hasImuReading_ = true;
+  unlock();
+}
+
+bool SharedState::getImuReading(ImuService::Reading &out) const {
+  lock();
+  bool available = hasImuReading_;
+  if (available) {
+    out = imuReading_;
+  }
+  unlock();
+  return available;
+}

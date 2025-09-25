@@ -8,6 +8,7 @@
 #endif
 
 #include "config/ConfigManager.h"
+#include "imu/ImuService.h"
 
 class SharedState {
  public:
@@ -16,6 +17,9 @@ class SharedState {
 
   void updateConfig(const ConfigManager::Config &config);
   bool getConfigCopy(ConfigManager::Config &out) const;
+
+  void updateImuReading(const ImuService::Reading &reading);
+  bool getImuReading(ImuService::Reading &out) const;
 
  private:
   void lock() const;
@@ -28,4 +32,6 @@ class SharedState {
 #endif
   ConfigManager::Config config_{};
   bool hasConfig_ = false;
+  ImuService::Reading imuReading_{};
+  bool hasImuReading_ = false;
 };

@@ -55,6 +55,8 @@
   },
   "imu": {
     "enabled": true,
+    "sda_gpio": 2,
+    "scl_gpio": 1,
     "gesture_ui_mode": true,
     "gesture_debug_log": false,
     "gesture_threshold_mps2": 15.0,
@@ -62,8 +64,8 @@
     "update_interval_ms": 33
   },
   "buzzer": {
-    "enabled": false,
-    "volume": 50
+    "enabled": true,
+    "volume": 20
   },
   "led": {
     "enabled": true,

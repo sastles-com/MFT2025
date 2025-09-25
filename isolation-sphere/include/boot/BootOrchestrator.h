@@ -13,10 +13,17 @@ class BootOrchestrator {
     std::function<void()> onStorageReady;
   };
 
+  struct Services {
+    std::function<bool(const ConfigManager::DisplayConfig &)> displayInitialize;
+    std::function<void(const ConfigManager::Config &)> playStartupTone;
+    std::function<void(const ConfigManager::Config &)> onConfigReady;
+  };
+
   BootOrchestrator(StorageManager &storage,
                    ConfigManager &config,
                    SharedState &shared,
-                   Callbacks callbacks = {});
+                   Callbacks callbacks = {},
+                   Services services = {});
 
   bool run();
 
@@ -27,5 +34,6 @@ class BootOrchestrator {
   ConfigManager &config_;
   SharedState &shared_;
   Callbacks callbacks_;
+  Services services_;
   bool loadedConfig_ = false;
 };

@@ -38,6 +38,10 @@ bool ConfigManager::load(const char *path) {
   config_.system.psramEnabled = doc["system"]["PSRAM"].as<bool>();
   config_.system.debug = doc["system"]["debug"].as<bool>();
 
+  const JsonVariantConst audio = doc["buzzer"];
+  config_.buzzer.enabled = audio["enabled"].as<bool>();
+  config_.buzzer.volume = static_cast<std::uint8_t>(audio["volume"].as<std::uint32_t>());
+
   const JsonVariantConst display = doc["display"];
   config_.display.width = static_cast<std::uint16_t>(display["width"].as<std::uint16_t>());
   config_.display.height = static_cast<std::uint16_t>(display["height"].as<std::uint16_t>());
@@ -59,6 +63,21 @@ bool ConfigManager::load(const char *path) {
   config_.mqtt.topicUi = mqtt["topic"]["ui"].as<const char *>() ? mqtt["topic"]["ui"].as<const char *>() : "";
   config_.mqtt.topicStatus = mqtt["topic"]["status"].as<const char *>() ? mqtt["topic"]["status"].as<const char *>() : "";
   config_.mqtt.topicImage = mqtt["topic"]["image"].as<const char *>() ? mqtt["topic"]["image"].as<const char *>() : "";
+
+  const JsonVariantConst imu = doc["imu"];
+  if (!imu.isNull()) {
+    config_.imu.enabled = imu["enabled"].as<bool>();
+    config_.imu.gestureUiMode = imu["gesture_ui_mode"].as<bool>();
+    config_.imu.gestureDebugLog = imu["gesture_debug_log"].as<bool>();
+    config_.imu.gestureThresholdMps2 = imu["gesture_threshold_mps2"].as<float>();
+    config_.imu.gestureWindowMs = imu["gesture_window_ms"].as<std::uint32_t>();
+    config_.imu.updateIntervalMs = imu["update_interval_ms"].as<std::uint32_t>();
+    if (config_.imu.updateIntervalMs == 0) {
+      config_.imu.updateIntervalMs = 33;
+    }
+  } else {
+    config_.imu = ConfigManager::ImuConfig{};
+  }
 
   loaded_ = true;
   return true;

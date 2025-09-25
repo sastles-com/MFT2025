@@ -6,15 +6,37 @@
 #include <esp_task_wdt.h>
 #include <TJpg_Decoder.h>
 
+#include "audio/BuzzerService.h"
 #include "boot/BootOrchestrator.h"
 #include "config/ConfigManager.h"
 #include "core/CoreTasks.h"
 #include "core/SharedState.h"
+#include "display/DisplayController.h"
+#include "hardware/HardwareContext.h"
 #include "storage/StorageManager.h"
 #include "storage/StorageStager.h"
 
 #include <LittleFS.h>
 #include <PSRamFS.h>
+
+class M5DisplayDriver : public HardwareContext::DisplayDriver {
+ public:
+  bool begin() override { return M5.Display.begin(); }
+
+  void setRotation(std::int8_t rotation) override { M5.Display.setRotation(rotation); }
+
+  void setBrightness(std::uint8_t brightness) override { M5.Display.setBrightness(brightness); }
+
+  void fillScreen(std::uint16_t color) override { M5.Display.fillScreen(color); }
+};
+
+class M5HardwareContext : public HardwareContext {
+ public:
+  HardwareContext::DisplayDriver &display() override { return displayDriver_; }
+
+ private:
+  M5DisplayDriver displayDriver_;
+};
 
 // PSRAM検出・テスト関数
 void testPSRAM() {
@@ -88,6 +110,143 @@ CoreTask::TaskConfig makeTaskConfig(const char *name, int coreId, std::uint32_t 
   cfg.loopIntervalMs = intervalMs;
   return cfg;
 }
+
+void scanI2CBus(TwoWire &bus, const char *label) {
+  Serial.printf("[I2C] Scanning %s...\n", label);
+  bool found = false;
+  for (uint8_t address = 0x08; address <= 0x77; ++address) {
+    bus.beginTransmission(address);
+    uint8_t error = bus.endTransmission();
+    if (error == 0) {
+      Serial.printf("[I2C] %s device at 0x%02X\n", label, address);
+      found = true;
+    } else if (error == 4) {
+      Serial.printf("[I2C] %s unknown error at 0x%02X\n", label, address);
+    }
+  }
+  if (!found) {
+    Serial.printf("[I2C] No devices detected on %s\n", label);
+  }
+}
+
+void scanInternalI2C(const char *label) {
+  Serial.printf("[I2C] Scanning %s (M5.In_I2C)...\n", label);
+  bool results[120] = {false};
+  M5.In_I2C.scanID(results);
+  bool found = false;
+  for (int addr = 0; addr < 120; ++addr) {
+    if (!results[addr]) {
+      continue;
+    }
+    Serial.printf("[I2C] %s device at 0x%02X\n", label, addr + 8);
+    found = true;
+  }
+  if (!found) {
+    Serial.printf("[I2C] No devices detected on %s\n", label);
+  }
+}
+
+namespace {
+
+float quaternionToRoll(const ImuService::Reading &r) {
+  const float qw = r.qw;
+  const float qx = r.qx;
+  const float qy = r.qy;
+  const float qz = r.qz;
+  const float t0 = +2.0f * (qw * qx + qy * qz);
+  const float t1 = +1.0f - 2.0f * (qx * qx + qy * qy);
+  return atan2f(t0, t1);
+}
+
+float quaternionToPitch(const ImuService::Reading &r) {
+  const float qw = r.qw;
+  const float qx = r.qx;
+  const float qy = r.qy;
+  const float qz = r.qz;
+  float t2 = +2.0f * (qw * qy - qz * qx);
+  if (t2 > 1.0f) t2 = 1.0f;
+  if (t2 < -1.0f) t2 = -1.0f;
+  return asinf(t2);
+}
+
+float quaternionToYaw(const ImuService::Reading &r) {
+  const float qw = r.qw;
+  const float qx = r.qx;
+  const float qy = r.qy;
+  const float qz = r.qz;
+  const float t3 = +2.0f * (qw * qz + qx * qy);
+  const float t4 = +1.0f - 2.0f * (qy * qy + qz * qz);
+  return atan2f(t3, t4);
+}
+
+void drawImuVisualization(const ImuService::Reading &reading) {
+  static uint32_t lastDrawMs = 0;
+  const uint32_t now = millis();
+  if (now - lastDrawMs < 80) {
+    return;
+  }
+  lastDrawMs = now;
+
+  constexpr int areaX = 0;
+  constexpr int areaY = 36;
+  const int areaW = M5.Display.width();
+  const int areaH = std::min(100, M5.Display.height() - areaY);
+  const int centerX = areaX + areaW / 2;
+  const int centerY = areaY + areaH / 2 + 10;
+  const int radius = std::min(areaW, areaH) / 3;
+
+  const float roll = quaternionToRoll(reading);
+  const float pitch = quaternionToPitch(reading);
+  const float yaw = quaternionToYaw(reading);
+
+  M5.Display.fillRect(areaX, areaY, areaW, areaH, TFT_BLACK);
+
+  M5.Display.drawCircle(centerX, centerY, radius, TFT_DARKGREY);
+  M5.Display.drawCircle(centerX, centerY, radius / 2, TFT_DARKGREY);
+
+  const float pitchOffset = pitch * radius * 0.6f;
+  const float cosR = cosf(roll);
+  const float sinR = sinf(roll);
+
+  auto drawHorizon = [&](float localX) {
+    const float x = localX;
+    const float y = pitchOffset;
+    const float rotatedX = x * cosR - y * sinR;
+    const float rotatedY = x * sinR + y * cosR;
+    return std::pair<int16_t, int16_t>{
+        static_cast<int16_t>(centerX + rotatedX),
+        static_cast<int16_t>(centerY + rotatedY)};
+  };
+
+  auto left = drawHorizon(-radius);
+  auto right = drawHorizon(radius);
+  M5.Display.drawLine(left.first, left.second, right.first, right.second, TFT_YELLOW);
+
+  const float cosY = cosf(yaw);
+  const float sinY = sinf(yaw);
+  auto rotateYaw = [&](float x, float y) {
+    const float rx = x * cosY - y * sinY;
+    const float ry = x * sinY + y * cosY;
+    return std::pair<int16_t, int16_t>{
+        static_cast<int16_t>(centerX + rx),
+        static_cast<int16_t>(centerY + ry)};
+  };
+
+  const float pointerLen = radius - 4;
+  auto p0 = rotateYaw(0.0f, -pointerLen);
+  auto p1 = rotateYaw(-12.0f, pointerLen);
+  auto p2 = rotateYaw(12.0f, pointerLen);
+  M5.Display.fillTriangle(p0.first, p0.second, p1.first, p1.second, p2.first, p2.second, TFT_CYAN);
+
+  M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+  M5.Display.setTextSize(1);
+  const int textY = areaY + areaH - 30;
+  M5.Display.setCursor(areaX + 2, textY);
+  constexpr float radToDeg = 180.0f / PI;
+  M5.Display.printf("R:%6.1f P:%6.1f Y:%6.1f\n", roll * radToDeg, pitch * radToDeg, yaw * radToDeg);
+}
+
+}  // namespace
 
 }
 
@@ -200,13 +359,39 @@ void setup() {
   // M5Unified初期化（動作実績のある設定を使用）
   auto cfg = M5.config();
   cfg.external_spk = false;  // 外部スピーカー無効
-  cfg.output_power = false;  // 電源出力無効
-  cfg.internal_imu = false;  // IMU無効（SPIバス競合回避）
-  cfg.internal_rtc = false;  // RTC無効（I2C競合回避）
+  cfg.output_power = true;   // 5V出力を有効化して周辺へ電源供給
+  cfg.internal_imu = true;   // 内蔵IMUをM5Unifiedで利用
+  cfg.internal_rtc = true;   // 内蔵RTC/I2Cバスを有効化
+  cfg.fallback_board = m5::board_t::board_M5AtomS3R;  // ボード検出が失敗した場合のフォールバック
   M5.begin(cfg);
   
   Serial.println("M5.begin() completed");
   delay(500);
+
+#if defined(IMU_SENSOR_BMI270)
+  {
+    constexpr int kMaxImuAttempts = 5;
+    bool imuReady = M5.Imu.isEnabled();
+    for (int attempt = 0; attempt < kMaxImuAttempts && !imuReady; ++attempt) {
+      if (attempt > 0) {
+        Serial.printf("[IMU] Retry %d after delay\n", attempt);
+        delay(50 * attempt);
+      }
+      if (M5.Imu.begin(&M5.In_I2C, M5.getBoard())) {
+        imuReady = true;
+        break;
+      }
+    }
+    if (!imuReady) {
+      Serial.println("[IMU] Failed to initialize internal IMU via M5Unified");
+      scanInternalI2C("Internal I2C");
+    } else {
+      Serial.println("[IMU] Internal IMU ready via M5Unified");
+      scanInternalI2C("Internal I2C");
+    }
+  }
+#endif
+
   
   // PSRAMテスト実行
   testPSRAM();
@@ -219,6 +404,8 @@ void setup() {
   // PSRamFS容量を3MBに設定（8MB PSRAMの一部使用）
   Serial.println("[Storage] Configuring PSRamFS for 3MB capacity...");
   
+
+  uint32_t t = millis();
   // LittleFSの破損を修復するため、一度強制フォーマットを実行
   Serial.println("[Storage] Attempting LittleFS format to fix corruption...");
   if (LittleFS.begin(true, "/littlefs", 10, "littlefs")) {
@@ -227,14 +414,25 @@ void setup() {
   } else {
     Serial.println("[Storage] LittleFS format failed!");
   }
-  
+  Serial.printf("[Timing] LittleFS begin took %lu ms\n", millis() - t); 
+
+
+
+  t = millis();
   // PSRamFSを3MB容量で初期化
   if (PSRamFS.setPartitionSize(3 * 1024 * 1024) && PSRamFS.begin()) {
     Serial.println("[Storage] PSRamFS initialized with 3MB capacity");
   } else {
     Serial.println("[Storage] PSRamFS initialization failed, falling back to heap");
   }
-  
+  Serial.printf("[Timing] PSRamFS begin took %lu ms\n", millis() - t); 
+
+
+
+
+  M5HardwareContext hardwareContext;
+  DisplayController displayController(hardwareContext.display());
+
   BootOrchestrator::Callbacks bootCallbacks;
   bootCallbacks.onStorageReady = [&]() {
     Serial.println(storageManager.isLittleFsMounted() ? "[Storage] LittleFS mounted"
@@ -268,7 +466,7 @@ void setup() {
       }
       root.close();
     }
-
+    // esp_task_wdt_reset(); 
     if (storageManager.isLittleFsMounted()) {
       StorageStager stager(StorageStager::makeSourceFsOps(LittleFS),
                            StorageStager::makeDestinationFsOps(PSRamFS, LittleFS));
@@ -281,15 +479,65 @@ void setup() {
     } else {
       Serial.println("[Storage] LittleFS unavailable - using PSRamFS only mode");
     }
-
+    // esp_task_wdt_reset(); 
+    
+    
     return success;
   };
 
-  BootOrchestrator bootOrchestrator(storageManager, configManager, sharedState, bootCallbacks);
+  BootOrchestrator::Services bootServices;
+  bootServices.displayInitialize = [&](const ConfigManager::DisplayConfig &displayCfg) {
+    if (!displayCfg.displaySwitch) {
+      Serial.println("[Display] Display disabled by config");
+      return true;
+    }
+    return displayController.initialize(displayCfg);
+  };
+  bootServices.playStartupTone = [&](const ConfigManager::Config &cfg) {
+    if (!cfg.buzzer.enabled) {
+      Serial.println("[Buzzer] Startup tone disabled by config");
+      return;
+    }
+    BuzzerService buzzer;
+    if (!buzzer.begin()) {
+      Serial.println("[Buzzer] Initialization failed");
+      return;
+    }
+    Serial.println("[Buzzer] Startup tone playing");
+    buzzer.playStartupTone();
+    buzzer.stop();
+  };
+
+#if defined(IMU_SENSOR_BMI270)
+  delay(100);  // IMU電源立ち上がり待機
+  if (!M5.Imu.isEnabled() && !M5.Imu.begin(&M5.In_I2C, M5.getBoard())) {
+    Serial.println("[IMU] Failed to initialize internal IMU via M5Unified");
+    scanInternalI2C("Internal I2C");
+  } else {
+    Serial.println("[IMU] Internal IMU ready via M5Unified");
+    scanInternalI2C("Internal I2C");
+  }
+#elif defined(IMU_SENSOR_BNO055)
+  Wire1.begin(2, 1);
+  Wire1.setClock(400000);
+  scanI2CBus(Wire1, "Wire1 (external)");
+#endif
+  core1Task.markImuWireInitialized();
+
+
+  BootOrchestrator bootOrchestrator(storageManager, configManager, sharedState, bootCallbacks, bootServices);
   if (!bootOrchestrator.run()) {
     Serial.println("[Boot] Boot orchestrator failed - storage or staging incomplete");
   } else if (!bootOrchestrator.hasLoadedConfig()) {
     Serial.println("[Boot] Config not loaded during boot");
+  }
+
+
+  if (!core0Task.isStarted() && !core0Task.start()) {
+    Serial.println("[Core0] Failed to start task");
+  }
+  if (!core1Task.isStarted() && !core1Task.start()) {
+    Serial.println("[Core1] Failed to start task");
   }
   
   // FastLED初期化（一時的に無効化してSPI競合を回避）
@@ -327,48 +575,6 @@ void setup() {
   // // M5.Display初期化（動作実績のあるアプローチ）
   // Serial.println("=== Starting M5.Display initialization ===");
   // esp_task_wdt_reset();
-  
-  // Display設定
-  bool display_ok = M5.Display.begin();
-  esp_task_wdt_reset();
-  
-  if (display_ok) {
-    Serial.println("Step 1: M5.Display.begin() SUCCESS");
-  } else {
-    Serial.println("Step 1: M5.Display.begin() FAILED");
-    // 失敗してもCPUリセットを回避して続行
-  }
-  
-  // AtomS3R は GC9107 + offset_y=32 が自動適用される想定
-  M5.Display.setRotation(0);  // 0度回転
-  M5.Display.setBrightness(128);  // 明度設定（0-255）
-  M5.Display.fillScreen(TFT_BLACK);
-  esp_task_wdt_reset();
-  
-  Serial.println("Step 2: M5.Display basic setup completed");
-  
-  // // テスト表示
-  // M5.Display.fillScreen(TFT_GREEN);  // Green background
-  // delay(200);
-  
-  // M5.Display.setTextColor(TFT_BLACK);  // Black text on green
-  // M5.Display.setTextSize(2);
-  // M5.Display.setTextDatum(MC_DATUM);  // 中央揃え
-  // M5.Display.drawString("AtomS3R", 64, 30);
-  
-  // M5.Display.setTextColor(TFT_WHITE);  // White text
-  // M5.Display.setTextSize(1);
-  // M5.Display.setTextDatum(MC_DATUM);
-  // M5.Display.drawString("Display OK!", 64, 60);
-  // M5.Display.drawString("M5Unified", 64, 80);
-  
-  // // カラーテスト
-  // M5.Display.fillRect(10, 100, 20, 20, TFT_RED);     // Red
-  // M5.Display.fillRect(40, 100, 20, 20, TFT_GREEN);   // Green  
-  // M5.Display.fillRect(70, 100, 20, 20, TFT_BLUE);    // Blue
-  
-  // Serial.println("Step 2: M5.Display test display completed!");
-  // Serial.println("=== M5.Display initialization complete ===");
   
   // // PSRamFSテスト用：簡単な画像データを生成して保存
   // Serial.println("[Image Test] Starting image generation test...");
@@ -494,14 +700,6 @@ void setup() {
     }
   }
 
-  // デバイス情報を表示
-  if (!core0Task.isStarted() && !core0Task.start()) {
-    Serial.println("[Core0] Failed to start task");
-  }
-  if (!core1Task.isStarted() && !core1Task.start()) {
-    Serial.println("[Core1] Failed to start task");
-  }
-
   Serial.println("Device Info:");
   Serial.println("- Heap free: " + String(ESP.getFreeHeap()));
   Serial.println("- PSRAM size: " + String(ESP.getPsramSize()));
@@ -532,7 +730,12 @@ void loop() {
       Serial.println("Opening animation files not available");
     }
   }
-  
+
+  if (M5.BtnPWR.wasClicked()) {
+    Serial.println("[IMU] Calibration requested from power button");
+    core1Task.requestImuCalibration();
+  }
+
   if (millis() - lastUpdate > 2000) {  // 2秒間隔
     counter++;
     
@@ -554,6 +757,24 @@ void loop() {
     FastLED.show();
 #endif
     lastUpdate = millis();
+  }
+
+  static uint32_t lastImuOverlayMs = 0;
+  if (millis() - lastImuOverlayMs >= 200) {
+    ImuService::Reading imuReading;
+    if (sharedState.getImuReading(imuReading)) {
+      lastImuOverlayMs = millis();
+      const int overlayWidth = M5.Display.width();
+      const int overlayHeight = 34;  // 3行分
+      M5.Display.fillRect(0, 0, overlayWidth, overlayHeight, TFT_BLACK);
+      M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+      M5.Display.setTextSize(1);
+      M5.Display.setCursor(0, 0);
+      M5.Display.printf("qw:%6.3f qx:%6.3f\n", imuReading.qw, imuReading.qx);
+      M5.Display.printf("qy:%6.3f qz:%6.3f\n", imuReading.qy, imuReading.qz);
+      M5.Display.printf("ts:%lu\n", static_cast<unsigned long>(imuReading.timestampMs));
+      drawImuVisualization(imuReading);
+    }
   }
   
   // delay(50);

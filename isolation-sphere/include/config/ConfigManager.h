@@ -16,6 +16,11 @@ class ConfigManager {
     bool debug = false;
   };
 
+  struct BuzzerConfig {
+    bool enabled = false;
+    std::uint8_t volume = 0;
+  };
+
   struct DisplayConfig {
     std::uint16_t width = 0;
     std::uint16_t height = 0;
@@ -41,11 +46,22 @@ class ConfigManager {
     std::string topicImage;
   };
 
+  struct ImuConfig {
+    bool enabled = false;
+    bool gestureUiMode = false;
+    bool gestureDebugLog = false;
+    float gestureThresholdMps2 = 0.0f;
+    std::uint32_t gestureWindowMs = 0;
+    std::uint32_t updateIntervalMs = 33;
+  };
+
   struct Config {
     SystemConfig system;
     DisplayConfig display;
     WifiConfig wifi;
     MqttConfig mqtt;
+    BuzzerConfig buzzer;
+    ImuConfig imu;
   };
 
   explicit ConfigManager(FsProvider provider = FsProvider{});

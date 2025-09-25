@@ -5,8 +5,13 @@
 BootOrchestrator::BootOrchestrator(StorageManager &storage,
                                    ConfigManager &config,
                                    SharedState &shared,
-                                   Callbacks callbacks)
-    : storage_(storage), config_(config), shared_(shared), callbacks_(std::move(callbacks)) {}
+                                   Callbacks callbacks,
+                                   Services services)
+    : storage_(storage),
+      config_(config),
+      shared_(shared),
+      callbacks_(std::move(callbacks)),
+      services_(std::move(services)) {}
 
 bool BootOrchestrator::run() {
   loadedConfig_ = false;
@@ -28,6 +33,17 @@ bool BootOrchestrator::run() {
     }
   }
 
+  if (hasConfig && services_.playStartupTone) {
+    services_.playStartupTone(configCopy);
+  }
+
+  if (hasConfig) {
+    shared_.updateConfig(configCopy);
+    if (services_.onConfigReady) {
+      services_.onConfigReady(configCopy);
+    }
+  }
+
   if (callbacks_.stageAssets) {
     if (!callbacks_.stageAssets()) {
       return false;
@@ -35,6 +51,12 @@ bool BootOrchestrator::run() {
   }
 
   if (hasConfig) {
+    if (services_.displayInitialize) {
+      if (!services_.displayInitialize(configCopy.display)) {
+        return false;
+      }
+    }
+
     shared_.updateConfig(configCopy);
     loadedConfig_ = true;
   }
