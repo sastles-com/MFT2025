@@ -85,3 +85,20 @@ bool SharedState::getUiMode(bool &active) const {
   unlock();
   return available;
 }
+
+void SharedState::updateUiCommand(const std::string &command) {
+  lock();
+  uiCommand_ = command;
+  hasUiCommand_ = true;
+  unlock();
+}
+
+bool SharedState::getUiCommand(std::string &command) const {
+  lock();
+  bool available = hasUiCommand_;
+  if (available) {
+    command = uiCommand_;
+  }
+  unlock();
+  return available;
+}

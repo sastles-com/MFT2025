@@ -87,6 +87,15 @@ void test_shared_state_ui_mode() {
   TEST_ASSERT_TRUE(active);
 }
 
+void test_shared_state_ui_command() {
+  SharedState state;
+  std::string command;
+  TEST_ASSERT_FALSE(state.getUiCommand(command));
+  state.updateUiCommand("{\"cmd\":\"test\"}");
+  TEST_ASSERT_TRUE(state.getUiCommand(command));
+  TEST_ASSERT_EQUAL_STRING("{\"cmd\":\"test\"}", command.c_str());
+}
+
 void setUp() {}
 void tearDown() {}
 
@@ -97,6 +106,7 @@ int runUnityTests() {
   RUN_TEST(test_imu_service_reads_quaternion);
   RUN_TEST(test_shared_state_stores_imu_reading);
   RUN_TEST(test_shared_state_ui_mode);
+  RUN_TEST(test_shared_state_ui_command);
   return UNITY_END();
 }
 

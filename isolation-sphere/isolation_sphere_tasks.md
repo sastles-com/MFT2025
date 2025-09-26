@@ -73,17 +73,17 @@
 
 ## 通信制御
 - [P1] ネットワーク接続機能
-  - [P1] config.jsonから接続先を読み込み
-  - [P1] SSID情報から接続
-  - [P2] 再接続対応
+  - [x] [P1] config.jsonから接続先を読み込み
+  - [x] [P1] SSID情報から接続
+  - [x] [P2] 再接続対応
 - [P1] MQTTクライアントを実装（`AsyncMqttClient`）
-  - [P1] config.jsonからMQTT情報を取得
-  - [P1] ブローカー `192.168.10.1` に自動接続
+  - [x] [P1] config.jsonからMQTT情報を取得
+  - [x] [P1] ブローカー `192.168.10.1` に自動接続
   - [P1] topics
-    - [P1] UIトピック (`sphere/ui`) を購読
-    - [P1] ステータストピック (`sphere/status`) を定期送信
-    - [P1] imageトピック（`sphere/image`）
-  - [P1] `AsyncMqttClient` を利用し再接続と QoS 管理を実装
+    - [x] [P1] UIトピック (`sphere/ui`) を購読
+    - [x] [P1] ステータストピック (`sphere/status`) を定期送信
+    - [ ] [P1] imageトピック（`sphere/image`）
+  - [x] [P1] `AsyncMqttClient` を利用し再接続と QoS 管理を実装
 <!-- - [P2] UDPフレーム受信タスクを実装
   - [P1] config.jsonからP2P情報を取得
   - [P1] DMA受信できるかどうか確認

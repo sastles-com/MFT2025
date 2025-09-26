@@ -6,6 +6,7 @@
 #include "storage/StorageManager.h"
 #include "imu/ImuService.h"
 #include "ota/OtaService.h"
+#include "mqtt/MqttService.h"
 
 class Core0Task : public CoreTask {
  public:
@@ -23,6 +24,8 @@ class Core0Task : public CoreTask {
   OtaService otaService_;
   bool otaInitialized_ = false;
   uint32_t nextOtaRetryMs_ = 0;
+  MqttService mqttService_;
+  bool mqttConfigured_ = false;
 };
 
 class Core1Task : public CoreTask {

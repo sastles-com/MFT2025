@@ -10,6 +10,8 @@
 #include "config/ConfigManager.h"
 #include "imu/ImuService.h"
 
+#include <string>
+
 class SharedState {
  public:
   SharedState();
@@ -23,6 +25,9 @@ class SharedState {
 
   void setUiMode(bool active);
   bool getUiMode(bool &active) const;
+
+  void updateUiCommand(const std::string &command);
+  bool getUiCommand(std::string &command) const;
 
  private:
   void lock() const;
@@ -39,4 +44,6 @@ class SharedState {
   bool hasImuReading_ = false;
   bool uiModeActive_ = false;
   bool hasUiMode_ = false;
+  std::string uiCommand_;
+  bool hasUiCommand_ = false;
 };

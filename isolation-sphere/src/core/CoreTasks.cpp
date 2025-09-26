@@ -16,7 +16,8 @@ Core0Task::Core0Task(const TaskConfig &config,
     : CoreTask(config),
       configManager_(configManager),
       storageManager_(storageManager),
-      sharedState_(sharedState) {}
+      sharedState_(sharedState),
+      mqttService_(sharedState) {}
 
 void Core0Task::setup() {
   Serial.println("[Core0] Task setup complete");
@@ -48,6 +49,10 @@ void Core0Task::loop() {
         ESP.restart();
       }
     }
+
+    const auto &cfg = configManager_.config();
+    mqttConfigured_ = mqttService_.applyConfig(cfg);
+    mqttService_.loop();
   }
   sleep(config().loopIntervalMs);
 }
