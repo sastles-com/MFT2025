@@ -53,12 +53,23 @@ class ConfigManager {
     float gestureThresholdMps2 = 0.0f;
     std::uint32_t gestureWindowMs = 0;
     std::uint32_t updateIntervalMs = 33;
+    std::uint8_t uiShakeTriggerCount = 3;
+    std::uint32_t uiShakeWindowMs = 900;
   };
 
   struct OtaConfig {
     bool enabled = false;
     std::string username;
     std::string password;
+  };
+
+  struct UiConfig {
+    bool gestureEnabled = true;
+    bool dimOnEntry = true;
+    enum class OverlayMode : std::uint8_t {
+      kOverlay,
+      kBlackout,
+    } overlayMode = OverlayMode::kOverlay;
   };
 
   struct Config {
@@ -69,6 +80,7 @@ class ConfigManager {
     BuzzerConfig buzzer;
     ImuConfig imu;
     OtaConfig ota;
+    UiConfig ui;
   };
 
   explicit ConfigManager(FsProvider provider = FsProvider{});

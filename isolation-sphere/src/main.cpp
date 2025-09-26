@@ -783,8 +783,8 @@ void loop() {
     }
   }
   
-  // delay(50);
-  delay(3);
+  // delay(3);
+  delay(1);
 }
 
 #endif  // UNIT_TEST

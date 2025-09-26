@@ -86,18 +86,30 @@ bool SharedState::getUiMode(bool &active) const {
   return available;
 }
 
-void SharedState::updateUiCommand(const std::string &command) {
+void SharedState::pushUiCommand(const std::string &command, bool external) {
   lock();
-  uiCommand_ = command;
-  hasUiCommand_ = true;
+  if (external) {
+    uiCommandIncoming_ = command;
+    hasUiCommandIncoming_ = true;
+  } else {
+    uiCommandOutgoing_ = command;
+    hasUiCommandOutgoing_ = true;
+  }
   unlock();
 }
 
-bool SharedState::getUiCommand(std::string &command) const {
+bool SharedState::popUiCommand(std::string &command, bool external) {
   lock();
-  bool available = hasUiCommand_;
+  bool available = external ? hasUiCommandIncoming_ : hasUiCommandOutgoing_;
   if (available) {
-    command = uiCommand_;
+    command = external ? uiCommandIncoming_ : uiCommandOutgoing_;
+    if (external) {
+      hasUiCommandIncoming_ = false;
+      uiCommandIncoming_.clear();
+    } else {
+      hasUiCommandOutgoing_ = false;
+      uiCommandOutgoing_.clear();
+    }
   }
   unlock();
   return available;

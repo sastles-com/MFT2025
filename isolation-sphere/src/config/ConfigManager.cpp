@@ -3,6 +3,7 @@
 #include <ArduinoJson.h>
 #include <FS.h>
 #include <LittleFS.h>
+#include <cstring>
 #include <utility>
 
 namespace {
@@ -72,6 +73,12 @@ bool ConfigManager::load(const char *path) {
     config_.imu.gestureThresholdMps2 = imu["gesture_threshold_mps2"].as<float>();
     config_.imu.gestureWindowMs = imu["gesture_window_ms"].as<std::uint32_t>();
     config_.imu.updateIntervalMs = imu["update_interval_ms"].as<std::uint32_t>();
+    config_.imu.uiShakeTriggerCount = imu["ui_shake_trigger_count"].isNull()
+                                         ? 3
+                                         : static_cast<std::uint8_t>(imu["ui_shake_trigger_count"].as<std::uint32_t>());
+    config_.imu.uiShakeWindowMs = imu["ui_shake_window_ms"].isNull()
+                                     ? 900
+                                     : imu["ui_shake_window_ms"].as<std::uint32_t>();
     if (config_.imu.updateIntervalMs == 0) {
       config_.imu.updateIntervalMs = 33;
     }
@@ -86,6 +93,24 @@ bool ConfigManager::load(const char *path) {
     config_.ota.password = ota["password"].as<const char *>() ? ota["password"].as<const char *>() : "";
   } else {
     config_.ota = ConfigManager::OtaConfig{};
+  }
+
+  const JsonVariantConst ui = doc["ui"];
+  if (!ui.isNull()) {
+    config_.ui.gestureEnabled = ui["gesture_enabled"].isNull() ? true : ui["gesture_enabled"].as<bool>();
+    config_.ui.dimOnEntry = ui["dim_on_entry"].isNull() ? true : ui["dim_on_entry"].as<bool>();
+    const char *overlay = ui["overlay_mode"].as<const char *>();
+    if (overlay != nullptr) {
+      if (strcasecmp(overlay, "black") == 0 || strcasecmp(overlay, "blackout") == 0) {
+        config_.ui.overlayMode = ConfigManager::UiConfig::OverlayMode::kBlackout;
+      } else {
+        config_.ui.overlayMode = ConfigManager::UiConfig::OverlayMode::kOverlay;
+      }
+    } else {
+      config_.ui.overlayMode = ConfigManager::UiConfig::OverlayMode::kOverlay;
+    }
+  } else {
+    config_.ui = ConfigManager::UiConfig{};
   }
 
   loaded_ = true;

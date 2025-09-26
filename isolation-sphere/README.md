@@ -152,6 +152,8 @@ pio device monitor -b 115200
 }
 ```
 
+> **補足**: LittleFS に書き込むファイル（例: `config.json`, ジョイスティック設定など）は `data/` ディレクトリにまとめて配置します。反映する際は `pio run -t buildfs -e atoms3r_bmi270` → `pio run -t uploadfs -e atoms3r_bmi270` を実行して、`data/` の内容を ESP32 と同期させてください。
+
 ### LED配置 (led_layout.csv)
 
 ```csv

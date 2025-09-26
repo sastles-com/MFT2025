@@ -90,10 +90,19 @@ void test_shared_state_ui_mode() {
 void test_shared_state_ui_command() {
   SharedState state;
   std::string command;
-  TEST_ASSERT_FALSE(state.getUiCommand(command));
-  state.updateUiCommand("{\"cmd\":\"test\"}");
-  TEST_ASSERT_TRUE(state.getUiCommand(command));
-  TEST_ASSERT_EQUAL_STRING("{\"cmd\":\"test\"}", command.c_str());
+
+  TEST_ASSERT_FALSE(state.popUiCommand(command, true));
+  TEST_ASSERT_FALSE(state.popUiCommand(command, false));
+
+  state.pushUiCommand("{\"cmd\":\"external\"}", true);
+  TEST_ASSERT_TRUE(state.popUiCommand(command, true));
+  TEST_ASSERT_EQUAL_STRING("{\"cmd\":\"external\"}", command.c_str());
+  TEST_ASSERT_FALSE(state.popUiCommand(command, true));
+
+  state.pushUiCommand("{\"cmd\":\"local\"}", false);
+  TEST_ASSERT_TRUE(state.popUiCommand(command, false));
+  TEST_ASSERT_EQUAL_STRING("{\"cmd\":\"local\"}", command.c_str());
+  TEST_ASSERT_FALSE(state.popUiCommand(command, false));
 }
 
 void setUp() {}

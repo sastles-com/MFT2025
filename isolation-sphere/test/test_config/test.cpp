@@ -33,6 +33,21 @@ const char *kSampleJson = R"json({
       "status": "sphere/status",
       "image": "sphere/image"
     }
+  },
+  "imu": {
+    "enabled": true,
+    "gesture_ui_mode": true,
+    "gesture_debug_log": false,
+    "gesture_threshold_mps2": 12.5,
+    "gesture_window_ms": 300,
+    "update_interval_ms": 40,
+    "ui_shake_trigger_count": 4,
+    "ui_shake_window_ms": 1200
+  },
+  "ui": {
+    "gesture_enabled": true,
+    "dim_on_entry": false,
+    "overlay_mode": "black"
   }
 })json";
 
@@ -88,6 +103,19 @@ void test_config_loader_parses_expected_fields() {
   TEST_ASSERT_EQUAL_STRING("sphere/ui", cfg.mqtt.topicUi.c_str());
   TEST_ASSERT_EQUAL_STRING("sphere/status", cfg.mqtt.topicStatus.c_str());
   TEST_ASSERT_EQUAL_STRING("sphere/image", cfg.mqtt.topicImage.c_str());
+
+  TEST_ASSERT_TRUE(cfg.imu.enabled);
+  TEST_ASSERT_TRUE(cfg.imu.gestureUiMode);
+  TEST_ASSERT_EQUAL_FLOAT(12.5f, cfg.imu.gestureThresholdMps2);
+  TEST_ASSERT_EQUAL_UINT32(300, cfg.imu.gestureWindowMs);
+  TEST_ASSERT_EQUAL_UINT32(40, cfg.imu.updateIntervalMs);
+  TEST_ASSERT_EQUAL_UINT8(4, cfg.imu.uiShakeTriggerCount);
+  TEST_ASSERT_EQUAL_UINT32(1200, cfg.imu.uiShakeWindowMs);
+
+  TEST_ASSERT_TRUE(cfg.ui.gestureEnabled);
+  TEST_ASSERT_FALSE(cfg.ui.dimOnEntry);
+  TEST_ASSERT_EQUAL(static_cast<int>(ConfigManager::UiConfig::OverlayMode::kBlackout),
+                    static_cast<int>(cfg.ui.overlayMode));
 }
 
 void test_config_loader_returns_false_when_file_missing() {

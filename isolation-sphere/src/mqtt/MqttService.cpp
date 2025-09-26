@@ -101,6 +101,12 @@ bool MqttService::publishStatus() {
   doc["uptime_ms"] = static_cast<uint32_t>(millis());
   doc["wifi_connected"] = WiFi.status() == WL_CONNECTED;
   doc["client"] = clientId_;
+  bool uiMode = false;
+  if (sharedState_.getUiMode(uiMode)) {
+    doc["ui_mode"] = uiMode;
+  } else {
+    doc["ui_mode"] = false;
+  }
 
   std::string payload;
   payload.reserve(128);
@@ -120,6 +126,25 @@ bool MqttService::publishImage(const uint8_t *data, size_t length, bool retain, 
   }
   const auto packetId = client_.publish(topicImage_.c_str(), qos, retain,
                                        reinterpret_cast<const char *>(data), length);
+  return packetId != 0;
+}
+
+bool MqttService::publishUiEvent(const std::string &command, const char *source) {
+  if (!enabled_ || !connected_ || topicUi_.empty() || command.empty()) {
+    return false;
+  }
+
+  StaticJsonDocument<128> doc;
+  doc["command"] = command.c_str();
+  doc["timestamp"] = static_cast<uint32_t>(millis());
+  if (source != nullptr) {
+    doc["source"] = source;
+  }
+
+  std::string payload;
+  serializeJson(doc, payload);
+
+  const auto packetId = client_.publish(topicUi_.c_str(), 1, false, payload.c_str(), payload.size());
   return packetId != 0;
 }
 
@@ -166,11 +191,35 @@ void MqttService::handleIncomingMessage(const char *topic, const std::string &pa
     return;
   }
   if (!topicUi_.empty() && topicUi_ == topic) {
-    sharedState_.updateUiCommand(payload);
+    if (tryParseUiMessage(payload)) {
+      return;
+    }
+    sharedState_.pushUiCommand(payload, true);
   }
 }
 
 void MqttService::resetIncomingBuffer(size_t totalLength) {
   incomingBuffer_.clear();
   incomingBuffer_.resize(totalLength);
+}
+
+bool MqttService::tryParseUiMessage(const std::string &payload) {
+  if (payload.empty()) {
+    return false;
+  }
+
+  StaticJsonDocument<256> doc;
+  auto error = deserializeJson(doc, payload);
+  if (error) {
+    return false;
+  }
+
+  const char *command = doc["command"];
+  if (command && command[0] != '\0') {
+    sharedState_.pushUiCommand(command, true);
+  }
+
+  // Additional settings (dim/overlay) can be parsed here in the future.
+
+  return true;
 }

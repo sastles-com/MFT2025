@@ -61,7 +61,9 @@
     "gesture_debug_log": false,
     "gesture_threshold_mps2": 15.0,
     "gesture_window_ms": 400,
-    "update_interval_ms": 33
+    "update_interval_ms": 33,
+    "ui_shake_trigger_count": 3,
+    "ui_shake_window_ms": 900
   },
   "buzzer": {
     "enabled": true,
@@ -71,6 +73,11 @@
     "enabled": true,
     "username": "admin",
     "password": "sphere"
+  },
+  "ui": {
+    "gesture_enabled": true,
+    "dim_on_entry": true,
+    "overlay_mode": "overlay"
   },
   "led": {
     "enabled": true,

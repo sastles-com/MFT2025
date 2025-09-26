@@ -17,7 +17,7 @@ class Core0Task : public CoreTask {
   void loop() override;
 
  private:
-  ConfigManager &configManager_;
+ ConfigManager &configManager_;
   StorageManager &storageManager_;
   SharedState &sharedState_;
   bool configLoaded_ = false;
@@ -37,6 +37,12 @@ class Core1Task : public CoreTask {
   void loop() override;
 
  private:
+ enum class UiInteractionMode : std::uint8_t {
+   kNavigation,
+   kBrightnessAdjust,
+   kCentering,
+ };
+
  SharedState &sharedState_;
   bool displayedConfig_ = false;
   ImuService imuService_;
@@ -58,6 +64,14 @@ class Core1Task : public CoreTask {
   static constexpr std::uint32_t kDefaultShakeWindowMs_ = 600;
   static constexpr std::uint32_t kShakeRefractoryMs_ = 200;
   void handleShakeGesture(const ImuService::Reading &reading);
+  void enterUiMode();
+  void exitUiMode();
+  void processUiMode(const ImuService::Reading &reading);
+  void updateUiReference(const ImuService::Reading &reading);
+  void handleUiCommand(const std::string &command, bool external);
+  void triggerLocalUiCommand(const char *command);
+  void applyUiBrightnessSettings(bool entering);
+  void processIncomingUiCommands();
 #ifdef UNIT_TEST
  public:
   void setImuHooksForTest(ImuService::Hooks hooks);
@@ -66,4 +80,22 @@ class Core1Task : public CoreTask {
  public:
  void markImuWireInitialized();
   void requestImuCalibration(std::uint8_t seconds = 10);
+
+ private:
+  ImuService::Reading lastImuReading_{};
+  ConfigManager::UiConfig uiConfig_{};
+  bool uiGestureEnabled_ = true;
+  UiInteractionMode uiInteractionMode_ = UiInteractionMode::kNavigation;
+  bool uiModeDimmed_ = false;
+  uint8_t uiPreviousBrightness_ = 128;
+  float uiReferenceRoll_ = 0.0f;
+  float uiReferencePitch_ = 0.0f;
+  float uiReferenceYaw_ = 0.0f;
+  bool uiXPositiveReady_ = true;
+  bool uiXNegativeReady_ = true;
+  uint32_t uiCommandCooldownEndMs_ = 0;
+
+  static constexpr float kUiCommandTriggerDeg_ = 25.0f;
+  static constexpr float kUiCommandResetDeg_ = 10.0f;
+  static constexpr uint32_t kUiCommandCooldownMs_ = 750;
 };

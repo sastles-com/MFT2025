@@ -26,8 +26,8 @@ class SharedState {
   void setUiMode(bool active);
   bool getUiMode(bool &active) const;
 
-  void updateUiCommand(const std::string &command);
-  bool getUiCommand(std::string &command) const;
+  void pushUiCommand(const std::string &command, bool external);
+  bool popUiCommand(std::string &command, bool external);
 
  private:
   void lock() const;
@@ -44,6 +44,8 @@ class SharedState {
   bool hasImuReading_ = false;
   bool uiModeActive_ = false;
   bool hasUiMode_ = false;
-  std::string uiCommand_;
-  bool hasUiCommand_ = false;
+  std::string uiCommandIncoming_;
+  bool hasUiCommandIncoming_ = false;
+  std::string uiCommandOutgoing_;
+  bool hasUiCommandOutgoing_ = false;
 };

@@ -20,6 +20,7 @@ class MqttService {
 
   bool publishStatus();
   bool publishImage(const uint8_t *data, size_t length, bool retain = false, uint8_t qos = 0);
+  bool publishUiEvent(const std::string &command, const char *source = "gesture");
   void stop();
 
  private:
@@ -27,6 +28,7 @@ class MqttService {
   void connectIfNeeded();
   void handleIncomingMessage(const char *topic, const std::string &payload);
   void resetIncomingBuffer(size_t totalLength);
+  bool tryParseUiMessage(const std::string &payload);
 
   SharedState &sharedState_;
   AsyncMqttClient client_;
