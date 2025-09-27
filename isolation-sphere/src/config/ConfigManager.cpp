@@ -7,7 +7,7 @@
 #include <utility>
 
 namespace {
-constexpr std::size_t kJsonCapacity = 4096;
+constexpr std::size_t kJsonCapacity = 8192;  // 4096から8192に増加
 
 std::string safeString(const JsonVariantConst &variant) {
   const char *value = variant.as<const char *>();
@@ -82,12 +82,17 @@ bool ConfigManager::load(const char *path) {
     return false;
   }
 
+  Serial.printf("[Config] Loading config from %s, size: %zu bytes\n", path, raw.length());
+  
   DynamicJsonDocument doc(kJsonCapacity);
   auto error = deserializeJson(doc, raw);
   if (error) {
+    Serial.printf("[Config] JSON parse error: %s\n", error.c_str());
     loaded_ = false;
     return false;
   }
+  
+  Serial.println("[Config] JSON parsed successfully");
 
   const JsonVariantConst system = doc["system"];
   config_.system.name = safeString(system["name"]);
@@ -120,9 +125,24 @@ bool ConfigManager::load(const char *path) {
   }
 
   const JsonVariantConst wifi = doc["wifi"];
+  config_.wifi.enabled = safeBool(wifi["enabled"], config_.wifi.enabled);
+  config_.wifi.mode = safeString(wifi["mode"]);
+  config_.wifi.visible = safeBool(wifi["visible"], config_.wifi.visible);
   config_.wifi.ssid = safeString(wifi["ssid"]);
   config_.wifi.password = safeString(wifi["password"]);
   config_.wifi.maxRetries = safeUint8(wifi["max_retries"], config_.wifi.maxRetries);
+  
+  const JsonVariantConst wifiAp = wifi["ap"];
+  if (!wifiAp.isNull()) {
+    config_.wifi.ap.ssid = safeString(wifiAp["ssid"]);
+    config_.wifi.ap.password = safeString(wifiAp["password"]);
+    config_.wifi.ap.localIp = safeString(wifiAp["local_ip"]);
+    config_.wifi.ap.gateway = safeString(wifiAp["gateway"]);
+    config_.wifi.ap.subnet = safeString(wifiAp["subnet"]);
+    config_.wifi.ap.channel = safeUint8(wifiAp["channel"], config_.wifi.ap.channel);
+    config_.wifi.ap.hidden = safeBool(wifiAp["hidden"], config_.wifi.ap.hidden);
+    config_.wifi.ap.maxConnections = safeUint8(wifiAp["max_connections"], config_.wifi.ap.maxConnections);
+  }
 
   const JsonVariantConst mqtt = doc["mqtt"];
   config_.mqtt.enabled = safeBool(mqtt["enabled"], config_.mqtt.enabled);
@@ -183,6 +203,9 @@ bool ConfigManager::load(const char *path) {
   }
 
   loaded_ = true;
+  Serial.printf("[Config] Configuration loaded successfully. WiFi enabled: %s, MQTT enabled: %s\n", 
+               config_.wifi.enabled ? "true" : "false",
+               config_.mqtt.enabled ? "true" : "false");
   return true;
 }
 

@@ -32,9 +32,23 @@ class ConfigManager {
   };
 
   struct WifiConfig {
+    bool enabled = true;
+    std::string mode = "ap";
+    bool visible = true;
     std::string ssid;
     std::string password;
     std::uint8_t maxRetries = 0;
+    
+    struct ApConfig {
+      std::string ssid;
+      std::string password;
+      std::string localIp = "192.168.100.1";
+      std::string gateway = "192.168.100.1";
+      std::string subnet = "255.255.255.0";
+      std::uint8_t channel = 6;
+      bool hidden = false;
+      std::uint8_t maxConnections = 8;
+    } ap;
   };
 
   struct MqttConfig {

@@ -7,10 +7,14 @@
 #include "imu/ImuService.h"
 #include "ota/OtaService.h"
 #include "mqtt/MqttService.h"
+// WiFi and MQTT includes
+#include "wifi/WiFiManager.h"
+#include "mqtt/MqttBroker.h"
 
 class Core0Task : public CoreTask {
  public:
   Core0Task(const TaskConfig &config, ConfigManager &configManager, StorageManager &storageManager, SharedState &sharedState);
+  ~Core0Task();
 
  protected:
   void setup() override;
@@ -26,6 +30,11 @@ class Core0Task : public CoreTask {
   uint32_t nextOtaRetryMs_ = 0;
   MqttService mqttService_;
   bool mqttConfigured_ = false;
+  // WiFi and MQTT members
+  WiFiManager *wifiManager_ = nullptr;
+  bool wifiConfigured_ = false;
+  MqttBroker *mqttBroker_ = nullptr;
+  bool mqttBrokerConfigured_ = false;
 };
 
 class Core1Task : public CoreTask {

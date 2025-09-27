@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <ESP.h>
+#include <LittleFS.h>
 #include <M5Unified.h>
 #include <algorithm>
 #include <cmath>
@@ -64,26 +65,96 @@ Core0Task::Core0Task(const TaskConfig &config,
       sharedState_(sharedState),
       mqttService_(sharedState) {}
 
+Core0Task::~Core0Task() {
+  if (wifiManager_) {
+    delete wifiManager_;
+    wifiManager_ = nullptr;
+  }
+  if (mqttBroker_) {
+    delete mqttBroker_;
+    mqttBroker_ = nullptr;
+  }
+}
+
 void Core0Task::setup() {
+  Serial.println("[Core0] Task setup starting...");
+  
+  // StorageManager初期化
+  if (!storageManager_.begin()) {
+    Serial.println("[Core0] StorageManager initialization failed");
+  } else {
+    Serial.println("[Core0] StorageManager initialized successfully");
+  }
+  
+  // WiFiManager初期化
+  wifiManager_ = new WiFiManager();
+  if (!wifiManager_) {
+    Serial.println("[Core0] Failed to allocate WiFiManager");
+  } else {
+    Serial.println("[Core0] WiFiManager allocated");
+  }
+  
+  if (!mqttBroker_) {
+  } else {
+  }
+  
   Serial.println("[Core0] Task setup complete");
 }
 
 void Core0Task::loop() {
-  if (!configLoaded_ && storageManager_.isLittleFsMounted()) {
-    if (configManager_.load()) {
-      sharedState_.updateConfig(configManager_.config());
-      configLoaded_ = true;
-      Serial.println("[Core0] Config loaded and shared");
+  if (!configLoaded_) {
+    // StorageManagerをバイパスして直接LittleFSからconfig.jsonを読み込み
+    if (LittleFS.exists("/config.json")) {
+      if (configManager_.load()) {
+        sharedState_.updateConfig(configManager_.config());
+        configLoaded_ = true;
+        Serial.println("[Core0] Config loaded and shared successfully");
+      } else {
+        Serial.println("[Core0] Config loading failed");
+      }
+    } else {
+      Serial.println("[Core0] Config file not found: /config.json");
     }
   }
+  
   if (configLoaded_) {
+    const auto &cfg = configManager_.config();
+    
+    // WiFiManager設定（1回だけ実行）
+    if (wifiManager_ && !wifiConfigured_) {
+      if (wifiManager_->initialize(cfg)) {
+        wifiConfigured_ = true;
+        Serial.println("[Core0] WiFiManager initialized successfully");
+      } else {
+        Serial.println("[Core0] WiFiManager initialization failed");
+      }
+    }
+    
+    // WiFiManagerループ処理
+    if (wifiManager_ && wifiConfigured_) {
+      wifiManager_->loop();
+    }
+    
+    if (mqttBroker_ && !mqttBrokerConfigured_ && wifiConfigured_) {
+      if (mqttBroker_->applyConfig(cfg)) {
+        mqttBrokerConfigured_ = true;
+      } else {
+      }
+    }
+    
+    if (mqttBroker_ && mqttBrokerConfigured_) {
+      mqttBroker_->loop();
+    }
+    
     if (!otaInitialized_) {
       uint32_t now = millis();
       if (now >= nextOtaRetryMs_) {
-        if (otaService_.begin(configManager_.config())) {
+        if (otaService_.begin(cfg)) {
           otaInitialized_ = true;
+          Serial.println("[Core0] OTA service initialized");
         } else {
           nextOtaRetryMs_ = now + 5000;
+          Serial.println("[Core0] OTA initialization failed, retrying in 5s");
         }
       }
     } else {
@@ -95,7 +166,6 @@ void Core0Task::loop() {
       }
     }
 
-    const auto &cfg = configManager_.config();
     mqttConfigured_ = mqttService_.applyConfig(cfg);
     mqttService_.loop();
     if (mqttConfigured_) {
@@ -104,6 +174,8 @@ void Core0Task::loop() {
         mqttService_.publishUiEvent(outgoingCommand);
       }
     }
+  } else {
+    Serial.println("[Core0] Waiting for config to load...");
   }
   sleep(config().loopIntervalMs);
 }
