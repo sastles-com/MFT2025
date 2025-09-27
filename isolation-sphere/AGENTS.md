@@ -58,4 +58,7 @@
 - When adding libraries, declare them in `lib_deps` and prefer versions compatible with PSRAM and FastLED to maintain stable builds.
 
 ## MQTT Topic Rules
-詳細なトピック設計ガイドは `mqtt_rules.md` に記載されています。実装時は必ず参照し、`sphere/ui/#` などの階層構造や JSON ペイロード運用の方針に従ってください。
+詳細なトピック設計ガイドは `../doc/mqtt_rules.md` に記載されています。実装時は必ず参照し、`sphere/ui/#` などの階層構造や JSON ペイロード運用の方針に従ってください。
+
+## Configuration Docs
+`config.json` の構造と共通設定に関する規約は `../doc/define_config.md` に集約しています。Sphere / Joystick / RasPi 各モジュールで設定を追加・変更する際は、ドキュメントのルールと項目分類に従ってください。

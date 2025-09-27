@@ -49,6 +49,23 @@ bool SharedState::getCommunicationStatus(CommunicationStatus &out) const {
   return has;
 }
 
+void SharedState::setConfig(const ConfigManager::Config &config) {
+  lock();
+  config_ = config;
+  hasConfig_ = true;
+  unlock();
+}
+
+bool SharedState::getConfig(ConfigManager::Config &out) const {
+  lock();
+  const bool has = hasConfig_;
+  if (has) {
+    out = config_;
+  }
+  unlock();
+  return has;
+}
+
 void SharedState::lock() const {
 #ifndef UNIT_TEST
   if (mutex_ != nullptr) {

@@ -99,6 +99,11 @@
 - [x] [P2] OTA 実行後に自動リブートし、動作確認フィードバック（MQTT 通知 / LCD 表示）を実装
 - [P2] バッテリー駆動時の中断対策としてロールバック条件を検討（起動確認まで旧パーティション維持）
 
+## 共通ライブラリ整備
+- [ ] [P1] `ConfigManager` / `BuzzerManager` / `SharedState` など共通モジュールを `lib/common` に切り出し、`isolation-sphere` と `joystick` から共通参照できる構造に再編する。
+- [ ] [P1] 共通ライブラリ化後、両プロジェクトのビルド設定（`CMakeLists` / `platformio.ini`）を調整し、片側更新が他方にも反映されるワークフローを整える。
+- [ ] [P2] 共通ライブラリ向けの最小テストスイートを `test/common` に用意し、CI で両プロジェクト共通コードの回 regress を検出できるようにする。
+
 ## マルチコア設計
 - [P1] Core0: 起動処理 + 通信・受信（LittleFS, MQTT/UDP, config管理）
 - [P1] Core1: センサー・表示系（IMU更新, LED制御, LCD/ブザー）

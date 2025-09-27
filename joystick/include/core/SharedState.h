@@ -9,6 +9,8 @@
 #include <freertos/semphr.h>
 #endif
 
+#include "config/ConfigManager.h"
+
 /**
  * @brief コア間で共有するジョイスティック状態を保持する。
  */
@@ -40,6 +42,9 @@ class SharedState {
   void setCommunicationStatus(const CommunicationStatus &status);
   bool getCommunicationStatus(CommunicationStatus &out) const;
 
+  void setConfig(const ConfigManager::Config &config);
+  bool getConfig(ConfigManager::Config &out) const;
+
  private:
   void lock() const;
   void unlock() const;
@@ -55,4 +60,7 @@ class SharedState {
 
   CommunicationStatus commStatus_{};
   bool hasCommStatus_ = false;
+
+  ConfigManager::Config config_{};
+  bool hasConfig_ = false;
 };

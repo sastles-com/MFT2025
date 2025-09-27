@@ -1,11 +1,15 @@
 #include <Arduino.h>
 
+#include "config/ConfigManager.h"
 #include "core/CoreTasks.h"
 #include "core/SharedState.h"
+
+#include <LittleFS.h>
 
 namespace {
 
 SharedState gSharedState;
+ConfigManager gConfigManager;
 
 CoreTask::TaskConfig makeConfig(const char *name,
                                 int coreId,
@@ -21,7 +25,7 @@ CoreTask::TaskConfig makeConfig(const char *name,
   return cfg;
 }
 
-Core0Task gCore0(makeConfig("Core0Task", 0, 5), gSharedState);
+Core0Task gCore0(makeConfig("Core0Task", 0, 5), gSharedState, gConfigManager);
 Core1Task gCore1(makeConfig("Core1Task", 1, 5), gSharedState);
 
 }  // namespace
@@ -33,6 +37,12 @@ void setup() {
   Serial.println("==============================");
   Serial.println(" MFT2025 Joystick Controller");
   Serial.println("==============================");
+
+  if (!LittleFS.begin(true)) {
+    Serial.println("[Main] LittleFS mount failed");
+  } else {
+    Serial.println("[Main] LittleFS mounted");
+  }
 
   if (!gCore0.start()) {
     Serial.println("[Main] Failed to start Core0 task");

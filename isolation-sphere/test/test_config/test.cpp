@@ -11,14 +11,6 @@ const char *kSampleJson = R"json({
     "PSRAM": true,
     "debug": false
   },
-  "display": {
-    "width": 128,
-    "height": 64,
-    "rotation": 1,
-    "offset": [2, 4],
-    "switch": true,
-    "color_depth": 16
-  },
   "wifi": {
     "ssid": "IsolationSphere",
     "password": "password123",
@@ -34,20 +26,30 @@ const char *kSampleJson = R"json({
       "image": "sphere/image"
     }
   },
-  "imu": {
-    "enabled": true,
-    "gesture_ui_mode": true,
-    "gesture_debug_log": false,
-    "gesture_threshold_mps2": 12.5,
-    "gesture_window_ms": 300,
-    "update_interval_ms": 40,
-    "ui_shake_trigger_count": 4,
-    "ui_shake_window_ms": 1200
-  },
-  "ui": {
-    "gesture_enabled": true,
-    "dim_on_entry": false,
-    "overlay_mode": "black"
+  "sphere": {
+    "display": {
+      "width": 128,
+      "height": 64,
+      "rotation": 1,
+      "offset": [2, 4],
+      "switch": true,
+      "color_depth": 16
+    },
+    "imu": {
+      "enabled": true,
+      "gesture_ui_mode": true,
+      "gesture_debug_log": false,
+      "gesture_threshold_mps2": 12.5,
+      "gesture_window_ms": 300,
+      "update_interval_ms": 40,
+      "ui_shake_trigger_count": 4,
+      "ui_shake_window_ms": 1200
+    },
+    "ui": {
+      "gesture_enabled": true,
+      "dim_on_entry": false,
+      "overlay_mode": "black"
+    }
   }
 })json";
 

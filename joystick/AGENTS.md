@@ -35,6 +35,7 @@
 ### joystick
 - stampfly用のjoystickを流用（["switch science"](https://www.switch-science.com/products/9819?_pos=4&_sid=1d9aad1f7&_ss=r)）し，これを使ってisolation-sphereをコントロールする
   - アナログスティック２基
+  - アナログスティック押し込み２基
   - ボタン２基
   - M5atomのLCDボタン
   - IMUセンサを使ったコントロール
@@ -85,9 +86,13 @@
 - The project assumes an ESP32-S3 based M5Stack Atom S3R; verify you are on the same Arduino core version pinned in `platformio.ini` to avoid toolchain drift.
 - When adding libraries, declare them in `lib_deps` and prefer versions compatible with PSRAM and FastLED to maintain stable builds.
 - LittleFS にアップロードするアセットは `/Users/katano/Documents/PlatformIO/Projects/MFT2025/data` に集約される。`pio run -t buildfs/uploadfs` 前にこのディレクトリを同期し、共通設定ファイル `config.json` を必ず参照する。
+- `config.json` の構造やモジュール毎の項目は `../doc/define_config.md` に記載されている。設定を追加・編集する場合は必ず同ドキュメントを更新し、分類ルールに従う。
 
 ## MQTT Topic Rules
-- 詳細なトピック設計ガイドは `doc/mqtt_rules.md` に記載されています（`isolation-sphere` と共通）。実装時は必ず参照し、`sphere/ui/#` などの階層構造や JSON ペイロード運用の方針に従ってください。
+- 詳細なトピック設計ガイドは `../doc/mqtt_rules.md` に記載されています（`isolation-sphere` と共通）。実装時は必ず参照し、`sphere/ui/#` などの階層構造や JSON ペイロード運用の方針に従ってください。
 
 ## UI Rules
-- UI 実装ガイドは `/Users/katano/Documents/PlatformIO/Projects/MFT2025/isolation-sphere/ui_rules.md` を参照する（両プロジェクト共通）。
+- UI 実装ガイドは `../doc/ui_rules.md` を参照する（両プロジェクト共通）。
+
+## Configuration Docs
+`config.json` の構造と共通設定に関する規約は `../doc/define_config.md` に集約しています。Sphere / Joystick / RasPi 各モジュールで設定を追加・変更する際は、ドキュメントのルールと項目分類に従ってください。
