@@ -90,6 +90,7 @@ bool ConfigManager::load(const char *path) {
   if (!wifi["mode"].isNull()) {
     config_.wifi.mode = safeString(wifi["mode"]);
   }
+  config_.wifi.visible = safeBool(wifi["visible"], config_.wifi.visible);
   config_.wifi.ssid = safeString(wifi["ssid"]);
   config_.wifi.password = safeString(wifi["password"]);
   config_.wifi.maxRetries = safeUint8(wifi["max_retries"], config_.wifi.maxRetries);
@@ -116,11 +117,16 @@ bool ConfigManager::load(const char *path) {
       config_.wifi.ap.subnet = safeString(wifiAp["subnet"]);
     }
     config_.wifi.ap.channel = safeUint8(wifiAp["channel"], config_.wifi.ap.channel);
-    config_.wifi.ap.hidden = safeBool(wifiAp["hidden"], config_.wifi.ap.hidden);
+    if (!wifiAp["hidden"].isNull()) {
+      config_.wifi.ap.hidden = safeBool(wifiAp["hidden"], config_.wifi.ap.hidden);
+    } else {
+      config_.wifi.ap.hidden = !config_.wifi.visible;
+    }
     config_.wifi.ap.maxConnections = safeUint8(wifiAp["max_connections"], config_.wifi.ap.maxConnections);
   } else {
     config_.wifi.ap.ssid = config_.wifi.ssid;
     config_.wifi.ap.password = config_.wifi.password;
+    config_.wifi.ap.hidden = !config_.wifi.visible;
   }
 
   const JsonVariantConst mqtt = doc["mqtt"];

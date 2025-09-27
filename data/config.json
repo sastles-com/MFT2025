@@ -1,24 +1,18 @@
 {
   "system": {
-    "name": "sphere-001",
+    "name": "joystick-001",
     "PSRAM": true,
     "SPIFFS_size": 3.0,
-    "debug": true
-  },
-  "paths": {
-    "opening": "/spiffs/images/opening/",
-    "layout": "/spiffs/led_layout.csv",
-    "config": "/spiffs/config.json",
-    "images": "/spiffs/images/"
+    "debug": true,
+    "hardware_revision": "v1.0"
   },
   "wifi": {
     "enabled": true,
-    "mode": "sta_ap",
-    "ssid": "IsolationSphere-Direct",
-    "password": "sphere123",
-    "max_retries": 5,
+    "mode": "ap",
+    "visible": true,
+    "max_retries": 0,
     "ap": {
-      "ssid": "IsolationSphere-Direct",
+      "ssid": "isolation-joystick",
       "password": "",
       "local_ip": "192.168.100.1",
       "gateway": "192.168.100.1",
@@ -28,39 +22,45 @@
       "max_connections": 8
     }
   },
-  "udp": {
-    "enabled": false,
-    "port": 8000,
-    "buffer_frames": 2
-  },
   "mqtt": {
     "enabled": true,
-    "broker": "192.168.10.1",
+    "broker": "192.168.100.1",
     "port": 1883,
+    "username": "",
+    "password": "",
+    "keep_alive": 60,
     "topic": {
-      "ui": "sphere/ui",
       "status": "sphere/status",
-      "image": "sphere/image"
+      "ui": "sphere/ui",
+      "image": "sphere/image",
+      "command": "sphere/command"
     }
   },
   "ota": {
     "enabled": true,
     "username": "admin",
-    "password": "sphere"
+    "password": "sphere",
+    "listen_port": 3232
   },
   "movie": {
     "frame_max": 50,
-    "fps": 10
+    "fps": 10,
+    "play_mode": "loop",
+    "default_playlist": "opening"
+  },
+  "paths": {
+    "config": "/littlefs/config.json",
+    "images": "/littlefs/images/",
+    "opening": "/littlefs/images/opening/",
+    "layout": "/littlefs/led_layout.csv",
+    "logs": "/littlefs/logs/"
   },
   "sphere": {
     "display": {
       "width": 128,
       "height": 128,
       "rotation": 0,
-      "offset": [
-        0,
-        0
-      ],
+      "offset": [0, 0],
       "color_depth": 16,
       "switch": true,
       "debug": true
@@ -75,70 +75,111 @@
       "enabled": true,
       "sda_gpio": 2,
       "scl_gpio": 1,
-      "gesture_ui_mode": true,
-      "gesture_debug_log": false,
-      "gesture_threshold_mps2": 15.0,
-      "gesture_window_ms": 400,
       "update_interval_ms": 33,
-      "ui_shake_trigger_count": 3,
-      "ui_shake_window_ms": 900
+      "gesture": {
+        "ui_mode": true,
+        "debug_log": false,
+        "threshold_mps2": 15.0,
+        "window_ms": 400,
+        "shake_trigger_count": 3,
+        "shake_window_ms": 900
+      }
     },
     "ui": {
       "gesture_enabled": true,
       "dim_on_entry": true,
-      "overlay_mode": "overlay"
+      "overlay_mode": "overlay",
+      "brightness_profile": "auto"
     },
     "led": {
       "enabled": true,
       "brightness": 128,
-      "strip_gpios": [
-        5,
-        6,
-        7,
-        8
-      ],
+      "strip_gpios": [5, 6, 7, 8],
       "num_strips": 4,
-      "leds_per_strip": [
-        180,
-        220,
-        180,
-        220
-      ],
+      "leds_per_strip": [180, 220, 180, 220],
       "total_leds": 800
     },
     "buzzer": {
       "enabled": true,
-      "volume": 20
+      "volume": 20,
+      "toneset": "default"
+    },
+    "storage": {
+      "psram_size_mb": 3.0,
+      "auto_format": true,
+      "mirror_assets": true
+    },
+    "paths": {
+      "littlefs_mount": "/littlefs",
+      "psramfs_mount": "/psram"
     }
   },
   "joystick": {
+    "instances": [
+      {
+        "id": "sphere001",
+        "mac": "E4:B3:23:F6:93:8C",
+        "static_ip": "192.168.100.100",
+        "mqtt_prefix": "sphere/001/",
+        "friendly_name": "Main Sphere",
+        "notes": "Primary sphere device",
+        "features": {
+          "led": true,
+          "imu": true,
+          "ui": true
+        }
+      }
+    ],
     "udp": {
       "target_ip": "192.168.100.100",
-      "port": 1884,
-      "update_interval_ms": 30,
+      "port": 8000,
+      "update_interval_ms": 33,
       "joystick_read_interval_ms": 16,
       "max_retry_count": 3,
       "timeout_ms": 1000
     },
     "system": {
       "buzzer_enabled": true,
-      "buzzer_volume": 64,
+      "buzzer_volume": 50,
       "opening_animation_enabled": true,
-      "lcd_brightness": 200,
+      "lcd_brightness": 128,
       "debug_mode": false,
-      "device_name": "AtomJoyStick-01"
+      "device_name": "joystick-001"
     },
     "input": {
-      "deadzone": 0.05,
-      "invert_left_y": true,
+      "deadzone": 0.1,
+      "invert_left_y": false,
       "invert_right_y": false,
-      "timestamp_offset_ms": 0
+      "timestamp_offset_ms": 0,
+      "sensitivity_profile": "normal"
     },
     "ui": {
       "use_dual_dial": true,
-      "default_mode": "live",
-      "button_debounce_ms": 200
+      "default_mode": "sphere_control",
+      "button_debounce_ms": 50,
+      "led_feedback": true
     }
   },
-  "raspi": {}
+  "raspi": {
+    "network": {
+      "ip": "192.168.10.1",
+      "gateway": "192.168.10.1",
+      "subnet": "255.255.255.0",
+      "interface": "wlan0",
+      "mtu": 1500
+    },
+    "sync": {
+      "mode": "mqtt",
+      "poll_interval_ms": 1000,
+      "retry": {
+        "max_count": 3,
+        "backoff_ms": 2000
+      }
+    },
+    "media": {
+      "playlist_path": "/media/playlists/",
+      "thumbnail_cache": "/tmp/thumbnails/",
+      "transcode_on_upload": false
+    }
+  }
 }

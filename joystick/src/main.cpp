@@ -3,13 +3,15 @@
 #include "config/ConfigManager.h"
 #include "core/CoreTasks.h"
 #include "core/SharedState.h"
+#include "storage/StorageManager.h"
 
 #include <LittleFS.h>
 
 namespace {
 
 SharedState gSharedState;
-ConfigManager gConfigManager;
+ConfigManager gConfigManager(ConfigManager::makeLittleFsProvider());
+StorageManager gStorageManager;
 
 CoreTask::TaskConfig makeConfig(const char *name,
                                 int coreId,
@@ -25,7 +27,7 @@ CoreTask::TaskConfig makeConfig(const char *name,
   return cfg;
 }
 
-Core0Task gCore0(makeConfig("Core0Task", 0, 5), gSharedState, gConfigManager);
+Core0Task gCore0(makeConfig("Core0Task", 0, 5), gConfigManager, gStorageManager, gSharedState);
 Core1Task gCore1(makeConfig("Core1Task", 1, 5), gSharedState);
 
 }  // namespace

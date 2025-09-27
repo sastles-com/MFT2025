@@ -81,8 +81,32 @@ ROS2/MQTT による外部制御、IMU による姿勢推定、UDP による動�
 - 実装は `AsyncElegantOTA` + `ESP Async WebServer` を採用し、`M5Unified` の Wi-Fi 管理と統合する。
 - OTA ページは認証付きで提供し、アップロード完了後は `ESP.restart()` で自動再起動する。
 
-## 4. 姿勢制御機能付きテクスチャマッピング
-- 
+## 4. WiFiアーキテクチャ仕様
+
+### WiFi接続モード
+
+- **固定APモード**: Joystickは常にアクセスポイント（AP）として動作
+- **STAモード接続なし**: 外部WiFiネットワークへの接続は行わない
+- **理由**: 独立した制御系として動作し、外部ネットワーク障害時でも直接制御を可能にする
+
+### ネットワーク設定
+
+```text
+SSID: isolation-joystick (config.json設定可能)
+IP範囲: 192.168.100.x
+デフォルトIP: 192.168.100.1
+チャンネル: 6 (config.json設定可能)
+最大接続数: 8デバイス
+```
+
+### システム全体でのWiFi分担
+
+- **Joystick**: ローカルAP提供、MQTTブローカー内蔵、直接制御UI
+- **Isolation Sphere**: STAモードでRaspberry PiのローカルAPに接続
+- **Raspberry Pi**:
+  - WiFiモジュール1: STA（外部WiFi/インターネット接続）
+  - WiFiモジュール2: AP（Isolation Sphere接続用）
+  - MQTTブローカー、Web UI、データログ機能
 
 ---
 
@@ -90,30 +114,54 @@ ROS2/MQTT による外部制御、IMU による姿勢推定、UDP による動�
 
 ```mermaid
 flowchart TD
+    subgraph "Joystick ESP32-S3"
+        subgraph Core0
+            A1[LittleFS Init] --> A2[config.json 読込]
+            A2 --> A3[WiFi AP起動<br/>192.168.100.x]
+            A3 --> A4[MQTT Broker起動]
+            A4 --> A5[UDP通信処理]
+            A5 --> A6[ジョイスティック制御]
+        end
 
-subgraph ESP32-S3
-    subgraph Core0
-        A1[LittleFS Init] --> A2[config.json 読込]
-        A2 --> A3[オープニング動画再生]
-        A3 --> A4[MQTT/UDP 通信処理]
-        A4 --> A5[LED 表示制御]
+        subgraph Core1
+            B1[ブザー制御<br>(buzzer_manager)]
+            B2[LCD 表示<br>System Ready]
+            B3[IMU センサー]
+        end
+
+        A2 --> B1
+        A2 --> B2
     end
 
-    subgraph Core1
-        B1[ブザー制御<br>(buzzer_manager)]
-        B2[LCD 表示<br>System Ready]
+    subgraph "Isolation Sphere ESP32-S3"
+        C1[WiFi STA接続]
+        C2[LED球体制御]
+        C3[姿勢制御]
+        C1 --> C2
+        C1 --> C3
+    end
+    
+    subgraph "Raspberry Pi Hub"
+        D1[WiFi Module 1<br/>STA - External]
+        D2[WiFi Module 2<br/>AP - Local]
+        D3[MQTT Broker]
+        D4[Web UI Server]
+        D5[Data Logger]
+        
+        D1 --> D3
+        D2 --> D3
+        D3 --> D4
+        D3 --> D5
     end
 
-    A2 --> B1
-    A2 --> B2
-end
+    subgraph External
+        E1[External WiFi<br/>Internet]
+    end
 
-subgraph Raspberry Pi
-    R1[MQTT Broker]
-    R2[Web UI<br>(アップロード/制御)]
-end
-
-ESP32-S3 <--MQTT/UDP--> Raspberry Pi
+    A6 -.->|直接UDP制御| C2
+    A4 -.->|独立MQTT| B2
+    D2 -->|ローカルAP| C1
+    D1 -.->|STA接続| E1
 ```
 
 ---

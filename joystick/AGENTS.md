@@ -25,14 +25,23 @@
 - ユニットテストはクラス単位で作成し，検証する
 - プログラム本体はこれらのクラスを組み合わせて実装するスタイル
 
-#　機能リスト
-### config.json読み込み機能（ConfigManager）
-### wifi AP
-### MQTTブローカー
+## 機能リスト
 
+### config.json読み込み機能（ConfigManager）
+
+### WiFi AP機能（外部WiFi接続なし）
+
+- **APモード固定**: isolation-joystick として独立したローカルネットワークを提供
+- **IP範囲**: 192.168.100.x (デフォルト)
+- **STAモード無効**: 外部WiFiルーターへの接続は行わない（Raspberry Piが担当）
+- **理由**: 制御系の独立性確保、外部ネットワーク障害時の直接制御維持
+
+### MQTTブローカー（内蔵）
 
 ## ハードウェア
+
 ### joystick
+
 - stampfly用のjoystickを流用（["switch science"](https://www.switch-science.com/products/9819?_pos=4&_sid=1d9aad1f7&_ss=r)）し，これを使ってisolation-sphereをコントロールする
   - アナログスティック２基
   - アナログスティック押し込み２基
@@ -41,7 +50,8 @@
   - IMUセンサを使ったコントロール
 - ESP32-S3R搭載の小型マイコンボード
 
-##　機能リスト
+## UI機能リスト
+
 - config.json読み込み機能（ConfigManager）
 - MQTTブローカー
 - wifi AP機能
@@ -52,8 +62,8 @@
   - Maintain：キャリブレーション，オフセット
   - System：再起動，システム関連
 
-
 ## Project Structure & Module Organization
+
 - `platformio.ini` defines the `atoms3r` PlatformIO environment, board-specific clock settings, and Arduino-based dependencies; review it before adding new hardware features.
 - `src/main.cpp` contains the firmware entry points (`setup()` and `loop()`); keep hardware abstractions in separate translation units once they stabilize.
 - Place shared headers in `include/` and reusable components or vendor forks in `lib/`; prepend module directories with the subsystem (e.g., `display_led/`).

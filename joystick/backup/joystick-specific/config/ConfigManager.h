@@ -19,6 +19,7 @@ class ConfigManager {
   struct WifiConfig {
     bool enabled = true;
     std::string mode = "ap";
+    bool visible = true;
     std::string ssid;
     std::string password;
     std::uint8_t maxRetries = 0;
