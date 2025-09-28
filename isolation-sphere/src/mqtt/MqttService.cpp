@@ -9,8 +9,34 @@ MqttService::MqttService(SharedState &sharedState) : sharedState_(sharedState) {
   client_.onConnect([this](bool /*sessionPresent*/) {
     connected_ = true;
     lastStatusMs_ = 0;  // publish immediately
+    // Subscribe to backward compatibility topics
     if (!topicUi_.empty()) {
       client_.subscribe(topicUi_.c_str(), 1);
+    }
+    if (!topicCommand_.empty()) {
+      client_.subscribe(topicCommand_.c_str(), 1);
+    }
+    
+    // Subscribe to individual device topics
+    if (!topicUiIndividual_.empty()) {
+      client_.subscribe(topicUiIndividual_.c_str(), 1);
+    }
+    if (!topicCommandIndividual_.empty()) {
+      client_.subscribe(topicCommandIndividual_.c_str(), 1);
+    }
+    
+    // Subscribe to broadcast topics
+    if (!topicUiAll_.empty()) {
+      client_.subscribe(topicUiAll_.c_str(), 1);
+    }
+    if (!topicCommandAll_.empty()) {
+      client_.subscribe(topicCommandAll_.c_str(), 1);
+    }
+    if (!topicSync_.empty()) {
+      client_.subscribe(topicSync_.c_str(), 2);  // QoS 2 for critical sync commands
+    }
+    if (!topicEmergency_.empty()) {
+      client_.subscribe(topicEmergency_.c_str(), 2);  // QoS 2 for emergency commands
     }
     publishStatus();
   });
@@ -48,15 +74,32 @@ bool MqttService::applyConfig(const ConfigManager::Config &config) {
   }
 
   bool newSettings = (!configured_) || broker_ != config.mqtt.broker || port_ != config.mqtt.port ||
-                     topicUi_ != config.mqtt.topicUi || topicStatus_ != config.mqtt.topicStatus ||
-                     topicImage_ != config.mqtt.topicImage || wifiConfig_.ssid != config.wifi.ssid ||
-                     wifiConfig_.password != config.wifi.password;
+                     topicUi_ != config.mqtt.topicUi || topicUiAll_ != config.mqtt.topicUiAll ||
+                     topicStatus_ != config.mqtt.topicStatus || topicImage_ != config.mqtt.topicImage ||
+                     topicCommand_ != config.mqtt.topicCommand || topicCommandAll_ != config.mqtt.topicCommandAll ||
+                     wifiConfig_.ssid != config.wifi.ssid || wifiConfig_.password != config.wifi.password;
 
   broker_ = config.mqtt.broker;
   port_ = config.mqtt.port == 0 ? 1883 : config.mqtt.port;
+  
+  // Backward compatibility topics
   topicUi_ = config.mqtt.topicUi.empty() ? "sphere/ui" : config.mqtt.topicUi;
-  topicStatus_ = config.mqtt.topicStatus.empty() ? "sphere/status" : config.mqtt.topicStatus;
   topicImage_ = config.mqtt.topicImage.empty() ? "sphere/image" : config.mqtt.topicImage;
+  topicCommand_ = config.mqtt.topicCommand.empty() ? "sphere/command" : config.mqtt.topicCommand;
+  
+  // Individual device topics
+  topicUiIndividual_ = config.mqtt.topicUiIndividual.empty() ? "sphere/001/ui" : config.mqtt.topicUiIndividual;
+  topicImageIndividual_ = config.mqtt.topicImageIndividual.empty() ? "sphere/001/image" : config.mqtt.topicImageIndividual;
+  topicCommandIndividual_ = config.mqtt.topicCommandIndividual.empty() ? "sphere/001/command" : config.mqtt.topicCommandIndividual;
+  topicStatus_ = config.mqtt.topicStatus.empty() ? "sphere/001/status" : config.mqtt.topicStatus;
+  topicInput_ = config.mqtt.topicInput.empty() ? "sphere/001/input" : config.mqtt.topicInput;
+  
+  // Broadcast topics
+  topicUiAll_ = config.mqtt.topicUiAll.empty() ? "sphere/all/ui" : config.mqtt.topicUiAll;
+  topicImageAll_ = config.mqtt.topicImageAll.empty() ? "sphere/all/image" : config.mqtt.topicImageAll;
+  topicCommandAll_ = config.mqtt.topicCommandAll.empty() ? "sphere/all/command" : config.mqtt.topicCommandAll;
+  topicSync_ = config.mqtt.topicSync.empty() ? "system/all/sync" : config.mqtt.topicSync;
+  topicEmergency_ = config.mqtt.topicEmergency.empty() ? "system/all/emergency" : config.mqtt.topicEmergency;
   wifiConfig_ = config.wifi;
   clientId_ = config.system.name.empty() ? "isolation-sphere" : config.system.name;
 
@@ -190,12 +233,45 @@ void MqttService::handleIncomingMessage(const char *topic, const std::string &pa
   if (topic == nullptr) {
     return;
   }
-  if (!topicUi_.empty() && topicUi_ == topic) {
+  
+  Serial.printf("[MQTT] Received message on topic: %s\n", topic);
+  
+  // Handle UI topics (backward compatibility + individual + broadcast)
+  if ((!topicUi_.empty() && topicUi_ == topic) ||
+      (!topicUiIndividual_.empty() && topicUiIndividual_ == topic) ||
+      (!topicUiAll_.empty() && topicUiAll_ == topic)) {
+    Serial.printf("[MQTT] Processing UI command: %s\n", payload.c_str());
     if (tryParseUiMessage(payload)) {
       return;
     }
     sharedState_.pushUiCommand(payload, true);
+    return;
   }
+  
+  // Handle Command topics (backward compatibility + individual + broadcast)
+  if ((!topicCommand_.empty() && topicCommand_ == topic) ||
+      (!topicCommandIndividual_.empty() && topicCommandIndividual_ == topic) ||
+      (!topicCommandAll_.empty() && topicCommandAll_ == topic)) {
+    Serial.printf("[MQTT] Processing system command: %s\n", payload.c_str());
+    sharedState_.pushSystemCommand(payload, true);
+    return;
+  }
+  
+  // Handle System Sync commands
+  if (!topicSync_.empty() && topicSync_ == topic) {
+    Serial.printf("[MQTT] Processing sync command: %s\n", payload.c_str());
+    sharedState_.pushSystemCommand(payload, true);
+    return;
+  }
+  
+  // Handle Emergency commands
+  if (!topicEmergency_.empty() && topicEmergency_ == topic) {
+    Serial.printf("[MQTT] Processing EMERGENCY command: %s\n", payload.c_str());
+    sharedState_.pushSystemCommand(payload, true);
+    return;
+  }
+  
+  Serial.printf("[MQTT] Unhandled topic: %s\n", topic);
 }
 
 void MqttService::resetIncomingBuffer(size_t totalLength) {

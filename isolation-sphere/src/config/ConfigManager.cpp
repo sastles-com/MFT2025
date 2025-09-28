@@ -100,6 +100,32 @@ bool ConfigManager::load(const char *path) {
   config_.system.debug = safeBool(system["debug"], config_.system.debug);
 
   const JsonVariantConst sphere = doc["sphere"];
+  
+  // Sphere instances configuration
+  if (!sphere.isNull()) {
+    const JsonArrayConst instances = sphere["instances"].as<JsonArrayConst>();
+    if (!instances.isNull()) {
+      config_.sphere.instances.clear();
+      for (JsonVariantConst instance : instances) {
+        ConfigManager::SphereConfig::InstanceConfig instConfig;
+        instConfig.id = safeString(instance["id"]);
+        instConfig.mac = safeString(instance["mac"]);
+        instConfig.staticIp = safeString(instance["static_ip"]);
+        instConfig.mqttPrefix = safeString(instance["mqtt_prefix"]);
+        instConfig.friendlyName = safeString(instance["friendly_name"]);
+        instConfig.notes = safeString(instance["notes"]);
+        
+        const JsonVariantConst features = instance["features"];
+        if (!features.isNull()) {
+          instConfig.features.led = safeBool(features["led"], instConfig.features.led);
+          instConfig.features.imu = safeBool(features["imu"], instConfig.features.imu);
+          instConfig.features.ui = safeBool(features["ui"], instConfig.features.ui);
+        }
+        config_.sphere.instances.push_back(instConfig);
+      }
+    }
+  }
+  
   JsonVariantConst audio = getObjectMember(sphere, "buzzer");
   if (audio.isNull()) {
     audio = doc["buzzer"];
@@ -148,9 +174,28 @@ bool ConfigManager::load(const char *path) {
   config_.mqtt.enabled = safeBool(mqtt["enabled"], config_.mqtt.enabled);
   config_.mqtt.broker = safeString(mqtt["broker"]);
   config_.mqtt.port = safeUint16(mqtt["port"], config_.mqtt.port);
+  config_.mqtt.username = safeString(mqtt["username"]);
+  config_.mqtt.password = safeString(mqtt["password"]);
+  config_.mqtt.keepAlive = safeUint16(mqtt["keep_alive"], config_.mqtt.keepAlive);
+  
+  // Backward compatibility topics
   config_.mqtt.topicUi = safeString(mqtt["topic"]["ui"]);
-  config_.mqtt.topicStatus = safeString(mqtt["topic"]["status"]);
   config_.mqtt.topicImage = safeString(mqtt["topic"]["image"]);
+  config_.mqtt.topicCommand = safeString(mqtt["topic"]["command"]);
+  
+  // Individual device topics
+  config_.mqtt.topicUiIndividual = safeString(mqtt["topic"]["ui_individual"]);
+  config_.mqtt.topicImageIndividual = safeString(mqtt["topic"]["image_individual"]);
+  config_.mqtt.topicCommandIndividual = safeString(mqtt["topic"]["command_individual"]);
+  config_.mqtt.topicStatus = safeString(mqtt["topic"]["status"]);
+  config_.mqtt.topicInput = safeString(mqtt["topic"]["input"]);
+  
+  // Broadcast topics
+  config_.mqtt.topicUiAll = safeString(mqtt["topic"]["ui_all"]);
+  config_.mqtt.topicImageAll = safeString(mqtt["topic"]["image_all"]);
+  config_.mqtt.topicCommandAll = safeString(mqtt["topic"]["command_all"]);
+  config_.mqtt.topicSync = safeString(mqtt["topic"]["sync"]);
+  config_.mqtt.topicEmergency = safeString(mqtt["topic"]["emergency"]);
 
   JsonVariantConst imuContainer = getObjectMember(sphere, "imu");
   if (imuContainer.isNull()) {
@@ -200,6 +245,53 @@ bool ConfigManager::load(const char *path) {
     }
   } else {
     config_.ui = ConfigManager::UiConfig{};
+  }
+
+  // Joystick configuration
+  const JsonVariantConst joystick = doc["joystick"];
+  if (!joystick.isNull()) {
+    // UDP settings
+    const JsonVariantConst udp = joystick["udp"];
+    if (!udp.isNull()) {
+      config_.joystick.udp.targetIp = safeString(udp["target_ip"]);
+      config_.joystick.udp.port = safeUint16(udp["port"], config_.joystick.udp.port);
+      config_.joystick.udp.updateIntervalMs = safeUint32(udp["update_interval_ms"], config_.joystick.udp.updateIntervalMs);
+      config_.joystick.udp.joystickReadIntervalMs = safeUint32(udp["joystick_read_interval_ms"], config_.joystick.udp.joystickReadIntervalMs);
+      config_.joystick.udp.maxRetryCount = safeUint32(udp["max_retry_count"], config_.joystick.udp.maxRetryCount);
+      config_.joystick.udp.timeoutMs = safeUint32(udp["timeout_ms"], config_.joystick.udp.timeoutMs);
+    }
+    
+    // System settings
+    const JsonVariantConst joySystem = joystick["system"];
+    if (!joySystem.isNull()) {
+      config_.joystick.system.buzzerEnabled = safeBool(joySystem["buzzer_enabled"], config_.joystick.system.buzzerEnabled);
+      config_.joystick.system.buzzerVolume = safeUint8(joySystem["buzzer_volume"], config_.joystick.system.buzzerVolume);
+      config_.joystick.system.openingAnimationEnabled = safeBool(joySystem["opening_animation_enabled"], config_.joystick.system.openingAnimationEnabled);
+      config_.joystick.system.lcdBrightness = safeUint8(joySystem["lcd_brightness"], config_.joystick.system.lcdBrightness);
+      config_.joystick.system.debugMode = safeBool(joySystem["debug_mode"], config_.joystick.system.debugMode);
+      config_.joystick.system.deviceName = safeString(joySystem["device_name"]);
+    }
+    
+    // Input settings
+    const JsonVariantConst input = joystick["input"];
+    if (!input.isNull()) {
+      config_.joystick.input.deadzone = safeFloat(input["deadzone"], config_.joystick.input.deadzone);
+      config_.joystick.input.invertLeftY = safeBool(input["invert_left_y"], config_.joystick.input.invertLeftY);
+      config_.joystick.input.invertRightY = safeBool(input["invert_right_y"], config_.joystick.input.invertRightY);
+      config_.joystick.input.timestampOffsetMs = safeUint32(input["timestamp_offset_ms"], config_.joystick.input.timestampOffsetMs);
+      config_.joystick.input.sensitivityProfile = safeString(input["sensitivity_profile"]);
+    }
+    
+    // UI settings
+    const JsonVariantConst joyUi = joystick["ui"];
+    if (!joyUi.isNull()) {
+      config_.joystick.ui.useDualDial = safeBool(joyUi["use_dual_dial"], config_.joystick.ui.useDualDial);
+      config_.joystick.ui.defaultMode = safeString(joyUi["default_mode"]);
+      config_.joystick.ui.buttonDebounceMs = safeUint32(joyUi["button_debounce_ms"], config_.joystick.ui.buttonDebounceMs);
+      config_.joystick.ui.ledFeedback = safeBool(joyUi["led_feedback"], config_.joystick.ui.ledFeedback);
+    }
+  } else {
+    config_.joystick = ConfigManager::JoystickConfig{};
   }
 
   loaded_ = true;

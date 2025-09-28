@@ -3,7 +3,7 @@
 #include <cstdint>
 
 #include "core/CoreTask.h"
-#include "core/CoreTasks.h"
+#include "core/SphereCoreTask.h"
 #include "core/SharedState.h"
 #include "storage/StorageManager.h"
 #include "config/ConfigManager.h"

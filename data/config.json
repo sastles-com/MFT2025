@@ -1,6 +1,6 @@
 {
   "system": {
-    "name": "joystick-001",
+    "name": "MFT2025-01",
     "PSRAM": true,
     "SPIFFS_size": 3.0,
     "debug": true,
@@ -30,10 +30,19 @@
     "password": "",
     "keep_alive": 60,
     "topic": {
-      "status": "sphere/status",
+      "status": "sphere/001/status",
       "ui": "sphere/ui",
+      "ui_individual": "sphere/001/ui",
+      "ui_all": "sphere/all/ui",
       "image": "sphere/image",
-      "command": "sphere/command"
+      "image_individual": "sphere/001/image",
+      "image_all": "sphere/all/image",
+      "command": "sphere/command",
+      "command_individual": "sphere/001/command",
+      "command_all": "sphere/all/command",
+      "input": "sphere/001/input",
+      "sync": "system/all/sync",
+      "emergency": "system/all/emergency"
     }
   },
   "ota": {
@@ -56,6 +65,21 @@
     "logs": "/littlefs/logs/"
   },
   "sphere": {
+    "instances": [
+      {
+        "id": "sphere001",
+        "mac": "E4:B3:23:F6:93:8C",
+        "static_ip": "192.168.100.100",
+        "mqtt_prefix": "sphere/001/",
+        "friendly_name": "Main Sphere",
+        "notes": "Primary sphere device",
+        "features": {
+          "led": true,
+          "imu": true,
+          "ui": true
+        }
+      }
+    ],
     "display": {
       "width": 128,
       "height": 128,
@@ -115,21 +139,6 @@
     }
   },
   "joystick": {
-    "instances": [
-      {
-        "id": "sphere001",
-        "mac": "E4:B3:23:F6:93:8C",
-        "static_ip": "192.168.100.100",
-        "mqtt_prefix": "sphere/001/",
-        "friendly_name": "Main Sphere",
-        "notes": "Primary sphere device",
-        "features": {
-          "led": true,
-          "imu": true,
-          "ui": true
-        }
-      }
-    ],
     "udp": {
       "target_ip": "192.168.100.100",
       "port": 8000,
@@ -145,6 +154,22 @@
       "lcd_brightness": 128,
       "debug_mode": false,
       "device_name": "joystick-001"
+    },
+    "audio": {
+      "enabled": false,
+      "master_volume": 20,
+      "sounds": {
+        "startup": true,
+        "click": true,
+        "error": true,
+        "test": true
+      },
+      "volumes": {
+        "startup": 15,
+        "click": 40,
+        "error": 70,
+        "test": 60
+      }
     },
     "input": {
       "deadzone": 0.1,

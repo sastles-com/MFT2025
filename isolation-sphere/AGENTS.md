@@ -62,3 +62,161 @@
 
 ## Configuration Docs
 `config.json` の構造と共通設定に関する規約は `../doc/define_config.md` に集約しています。Sphere / Joystick / RasPi 各モジュールで設定を追加・変更する際は、ドキュメントのルールと項目分類に従ってください。
+
+## CoreTask Architecture Separation
+### ⚠️ 重要: joystick / sphere 間でのCoreTask完全分離
+
+**isolation-sphere プロジェクトでは以下のファイルのみを使用:**
+- `include/core/SphereCoreTask.h` → `SphereCore0Task` / `SphereCore1Task`
+- `src/core/SphereCoreTask.cpp` → Sphere専用実装
+
+**joystick プロジェクトでは以下のファイルのみを使用:**
+- `include/core/JoystickCoreTasks.h` → `JoystickCore0Task` / `JoystickCore1Task` 
+- `src/core/JoystickCoreTasks.cpp` → Joystick専用実装
+
+**🚫 絶対に避けるべき混在:**
+- isolation-sphere内にJoystickCoreTask系ファイルを配置
+- joystick内にSphereCoreTask系ファイルを配置
+- 共通のCoreTaskクラス名を使用（`Core0Task`/`Core1Task`は廃止）
+
+**共通部分:**
+- `include/core/CoreTask.h` （基底クラス）
+- `include/core/SharedState.h`
+
+この分離により、各プロジェクトが独立してCoreTask実装を進化させ、相互の変更による影響を防ぎます。
+
+## Base Class & Implementation Separation Strategy
+
+### 🏗️ 重要: 基底クラス・実体分離の設計方針
+
+#### 原則: 共通インターフェース + プロジェクト固有実装
+
+- プロジェクト間で機能が類似するが実装が異なるクラスは、基底クラス（抽象インターフェース）と具体実装に分離する
+- 基底クラスは共通ヘッダーに配置し、具体実装は各プロジェクトに分離配置する
+- この方針により、インターフェース統一性とプロジェクト独立性を両立する
+
+### 分離対象候補クラス（優先度順）
+
+#### Phase 1: UIMode分離 [優先度: 最高] 📱
+
+```cpp
+// 共通基底: include/ui/UIMode.h
+class UIMode {
+  virtual void handleLeftStick(int16_t x, int16_t y) = 0;
+  virtual void handleRightStick(int16_t x, int16_t y) = 0;
+  virtual void handleButtons() = 0;
+  virtual String getModeName() = 0;
+  virtual uint16_t getModeIcon() = 0;
+};
+
+// Sphere実装: include/ui/SphereUIMode.h
+class SphereControlMode : public UIMode { /* 球体制御特化 */ };
+class SphereVideoMode : public UIMode { /* 映像管理特化 */ };
+
+// Joystick実装: include/ui/JoystickUIMode.h  
+class JoystickIsolationSphereMode : public UIMode { /* MQTT送信特化 */ };
+class JoystickVideoManagementMode : public UIMode { /* 動画選択特化 */ };
+```
+
+#### Phase 2: CommunicationService分離 [優先度: 高] 📡
+
+```cpp
+// 共通基底: include/communication/CommunicationService.h
+class CommunicationService {
+  virtual bool initialize(const ConfigManager::Config& config) = 0;
+  virtual bool publishData(const std::string& topic, const std::string& data) = 0;
+  virtual void loop() = 0;
+};
+
+// Sphere実装: include/communication/SphereCommunicationService.h
+class SphereMqttService : public CommunicationService { /* MQTT Client特化 */ };
+
+// Joystick実装: include/communication/JoystickCommunicationService.h
+class JoystickMqttBrokerService : public CommunicationService { /* 内蔵ブローカー+UDP */ };
+```
+
+#### Phase 3: InputManager分離 [優先度: 高] 🎮
+
+```cpp
+// 共通基底: include/input/InputManager.h
+class InputManager {
+  virtual bool initialize() = 0;
+  virtual bool readInput(InputState& state) = 0;
+  virtual bool hasNewInput() const = 0;
+};
+
+// Sphere実装: include/input/SphereInputManager.h
+class SphereImuInputManager : public InputManager { /* IMU+ジェスチャー検出 */ };
+
+// Joystick実装: include/input/JoystickInputManager.h  
+class JoystickAnalogInputManager : public InputManager { /* デュアルスティック特化 */ };
+```
+
+#### Phase 4: DisplayDriver拡張 [優先度: 中] 🖥️
+
+```cpp
+// 既存基底を拡張: include/display/DisplayDriver.h
+// SphereDisplayDriver: LED制御統合
+// JoystickDisplayDriver: LCD UI特化
+```
+
+### 実装ガイドライン
+
+#### ファイル配置ルール
+
+- **基底クラス**: `include/[category]/[BaseClassName].h` (両プロジェクト共通)
+- **Sphere実装**: `include/[category]/Sphere[ClassName].h` + `src/[category]/Sphere[ClassName].cpp`
+- **Joystick実装**: `include/[category]/Joystick[ClassName].h` + `src/[category]/Joystick[ClassName].cpp`
+
+#### 設計原則
+
+- 基底クラスは純粋仮想関数（`= 0`）のみ定義
+- プロジェクト固有の実装詳細は具体クラスに隠蔽
+- 依存注入パターンを活用してテスタビリティを維持
+- 名前空間衝突を避けるため、明確なプレフィックスを使用
+
+#### 移行戦略
+
+1. **段階的移行**: 既存クラスを一度に変更せず、新機能から適用開始
+2. **後方互換性**: 既存コードが動作し続けるよう、エイリアスや移行期間を設定
+3. **テスト優先**: 新しいインターフェースのテストを先行作成
+4. **ドキュメント更新**: 変更内容をAGENTS.md、README.mdに反映
+
+#### 将来の共通ライブラリ化方針
+
+**Phase 5: 共通ライブラリ化 [優先度: 将来] 📚**
+
+基底クラス・実体分離パターンが確立された後、以下の構造への移行を検討：
+
+```text
+MFT2025/
+├── lib/common/                   # 共通ライブラリ
+│   ├── include/
+│   │   ├── core/
+│   │   │   ├── CoreTask.h        # 基底クラス
+│   │   │   └── SharedState.h     # 共通状態
+│   │   ├── ui/UIMode.h           # UI基底クラス
+│   │   ├── communication/CommunicationService.h
+│   │   └── input/InputManager.h
+│   └── src/ (対応する実装)
+├── isolation-sphere/
+│   ├── platformio.ini: lib_deps += file://../lib/common
+│   └── 具体実装クラスのみ
+└── joystick/
+    ├── platformio.ini: lib_deps += file://../lib/common  
+    └── 具体実装クラスのみ
+```
+
+**移行条件:**
+
+- 各プロジェクトで基底クラス・実体分離が安定動作
+- 共通インターフェースのAPI仕様が固まる
+- 両プロジェクトで十分なテストカバレッジを達成
+
+**メリット:**
+
+- 真の基底クラス統一管理
+- バージョン管理の一元化
+- 依存関係の明確化
+
+この分離戦略により、プロジェクト間の独立性を保ちながら、共通インターフェースによる一貫性を実現します。

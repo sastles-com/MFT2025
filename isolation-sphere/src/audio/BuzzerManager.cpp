@@ -395,7 +395,7 @@ Result Manager::ValidateGpio(gpio_num_t gpio) const {
     return Result::kInvalidArgument;
   }
 
-  if (gpio >= GPIO_NUM_34 && gpio <= GPIO_NUM_39) {
+  if (gpio >= GPIO_NUM_34 && gpio <= GPIO_NUM_38) {
     return Result::kGpioConfigFailed;
   }
 

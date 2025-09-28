@@ -13,8 +13,13 @@
 #include "core/SharedState.h"
 #include "display/DisplayController.h"
 #include "hardware/HardwareContext.h"
+#include "imu/ImuService.h"
 #include "storage/StorageManager.h"
 #include "storage/StorageStager.h"
+
+// LED基盤システム & パフォーマンステスト
+#include "led/LEDSphereManager.h"
+#include "test/ProceduralPatternPerformanceTest.h"
 
 #include <LittleFS.h>
 #include <PSRamFS.h>
@@ -98,6 +103,7 @@ void testPSRAM() {
 CRGB leds[NUM_LEDS];
 StorageManager storageManager;
 SharedState sharedState;
+ImuService imuService;
 
 namespace {
 
@@ -259,12 +265,72 @@ void playOpeningAnimation();
 void playOpeningAnimationFromLittleFS();
 void playOpeningAnimationFromFS(fs::FS &fileSystem, const char* fsName);
 void playTestAnimation();
+void showOpeningProgress(int currentFrame, int totalFrames);
 
 // TJpg_Decoder用のコールバック関数
 bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap) {
   if (y >= M5.Display.height()) return 0;
   M5.Display.pushImage(x, y, w, h, bitmap);
   return 1;
+}
+
+// 進捗表示オーバーレイ
+void showOpeningProgress(int currentFrame, int totalFrames) {
+  static uint32_t lastUpdate = 0;
+  
+  // 100ms間隔で更新（パフォーマンス配慮）
+  if (millis() - lastUpdate < 100) return;
+  lastUpdate = millis();
+  
+  float progress = (float)(currentFrame - 1) / (float)totalFrames;
+  int progressPercent = (int)(progress * 100);
+  
+  // 画面右下に進捗表示
+  int displayWidth = M5.Display.width();
+  int displayHeight = M5.Display.height();
+  
+  // 進捗テキスト表示
+  M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+  M5.Display.setTextSize(1);
+  
+  // 背景を少し暗くしてテキストを見やすく
+  M5.Display.fillRect(displayWidth - 50, displayHeight - 25, 48, 23, TFT_BLACK);
+  
+  // パーセント表示
+  M5.Display.setCursor(displayWidth - 45, displayHeight - 20);
+  M5.Display.printf("%3d%%", progressPercent);
+  
+  // プログレスバー
+  int barWidth = 40;
+  int barHeight = 4;
+  int barX = displayWidth - 45;
+  int barY = displayHeight - 10;
+  
+  // バー背景
+  M5.Display.drawRect(barX, barY, barWidth, barHeight, TFT_DARKGREY);
+  
+  // バー進捗
+  int filledWidth = (int)(progress * (barWidth - 2));
+  if (filledWidth > 0) {
+    // 進捗に応じて色を変化
+    uint16_t barColor = TFT_GREEN;
+    if (progressPercent < 25) {
+      barColor = TFT_RED;
+    } else if (progressPercent < 50) {
+      barColor = TFT_ORANGE;
+    } else if (progressPercent < 75) {
+      barColor = TFT_YELLOW;
+    }
+    
+    M5.Display.fillRect(barX + 1, barY + 1, filledWidth, barHeight - 2, barColor);
+  }
+  
+  // フレーム番号表示（デバッグ用）
+  if (totalFrames > 0) {
+    M5.Display.setCursor(5, displayHeight - 20);
+    M5.Display.setTextColor(TFT_CYAN, TFT_BLACK);
+    M5.Display.printf("Frame %d/%d", currentFrame, totalFrames);
+  }
 }
 
 // Opening連番JPEG表示関数（PSRamFS版）
@@ -294,11 +360,15 @@ void playOpeningAnimationFromFS(fs::FS &fileSystem, const char* fsName) {
   for (int frame = 1; frame <= totalFrames; frame++) {
     unsigned long frameStart = millis();
     
+    // 進捗率計算
+    float progress = (float)(frame - 1) / (float)totalFrames;
+    int progressPercent = (int)(progress * 100);
+    
     // ファイル名を生成 (例: /images/opening/001.jpg)
     char filename[64];
     snprintf(filename, sizeof(filename), "/images/opening/%03d.jpg", frame);
     
-    Serial.printf("[Opening] Loading frame %d from %s: %s\n", frame, fsName, filename);
+    Serial.printf("[Opening] Loading frame %d from %s: %s (Progress: %d%%)\n", frame, fsName, filename, progressPercent);
     
     // 指定されたファイルシステムから画像ファイルを読み込み
     File jpegFile = fileSystem.open(filename, "r");
@@ -330,6 +400,9 @@ void playOpeningAnimationFromFS(fs::FS &fileSystem, const char* fsName) {
             // JPEG画像を表示
             TJpgDec.drawJpg(x, y, jpegData, fileSize);
             
+            // 進捗表示をオーバーレイ
+            showOpeningProgress(frame, totalFrames);
+            
             // Serial.println("[Opening] JPEG Frame " + String(frame) + " displayed");
           } else {
             Serial.println("[Opening] Invalid JPEG format detected");
@@ -345,6 +418,9 @@ void playOpeningAnimationFromFS(fs::FS &fileSystem, const char* fsName) {
       }
     } else {
       Serial.println("[Opening] Failed to open file: " + String(filename));
+      
+      // ファイルが見つからなくても進捗表示は継続
+      showOpeningProgress(frame, totalFrames);
     }
     
     // フレームレート調整（10fps）
@@ -547,6 +623,12 @@ void playTestAnimation() {
   Serial.println("[Opening] Test animation completed");
 }
 ConfigManager configManager;
+
+// LED基盤システム & パフォーマンステスト
+LEDSphere::LEDSphereManager sphereManager;
+PerformanceTest::ProceduralPatternPerformanceTester perfTester;
+bool performanceTestMode = false;
+
 // TODO: Implement proper CoreTasks
 // SphereCore0Task core0Task(makeTaskConfig("SphereCore0Task", 0, 4, 4096, 50), configManager, storageManager, sharedState);
 // SphereCore1Task core1Task(makeTaskConfig("SphereCore1Task", 1, 4, 4096, 20), sharedState);
@@ -687,10 +769,12 @@ void setup() {
     return displayController.initialize(displayCfg);
   };
   bootServices.playStartupTone = [&](const ConfigManager::Config &cfg) {
+    Serial.printf("[Buzzer] Startup tone callback invoked - buzzer enabled: %s\n", cfg.buzzer.enabled ? "true" : "false");
     if (!cfg.buzzer.enabled) {
       Serial.println("[Buzzer] Startup tone disabled by config");
       return;
     }
+    Serial.println("[Buzzer] Creating BuzzerService...");
     BuzzerService buzzer;
     if (!buzzer.begin()) {
       Serial.println("[Buzzer] Initialization failed");
@@ -699,11 +783,17 @@ void setup() {
     Serial.println("[Buzzer] Startup tone playing");
     buzzer.playStartupTone();
     buzzer.stop();
+    Serial.println("[Buzzer] Startup tone completed");
   };
 
 #if defined(IMU_SENSOR_BMI270)
-  // IMU初期化はCore1Taskで行うため、ここでは検出のみ実行
-  Serial.println("[IMU] Internal IMU detection will be handled by Core1Task");
+  // IMUサービス初期化
+  Serial.println("[IMU] Initializing IMU service...");
+  if (imuService.begin()) {
+    Serial.println("[IMU] IMU service initialized successfully");
+  } else {
+    Serial.println("[IMU] Failed to initialize IMU service");
+  }
   scanInternalI2C("Internal I2C");
 #elif defined(IMU_SENSOR_BNO055)
   Wire1.begin(2, 1);
@@ -763,6 +853,22 @@ void setup() {
 #else
   Serial.println("FastLED disabled (USE_FASTLED not defined)");
 #endif
+
+  // LED基盤システム初期化
+  Serial.println("[LEDSphere] Initializing LED Sphere Manager...");
+  if (sphereManager.initialize("/led_layout.csv")) {
+    Serial.println("[LEDSphere] LED Sphere Manager initialized successfully");
+    
+    // パフォーマンステスター初期化
+    if (perfTester.initialize(&sphereManager)) {
+      Serial.println("[PerfTest] Performance tester ready");
+      perfTester.setTestConfig(10000, true, true); // 10秒テスト
+    } else {
+      Serial.println("[PerfTest] Failed to initialize performance tester");
+    }
+  } else {
+    Serial.println("[LEDSphere] LED Sphere Manager initialization failed");
+  }
   
   // // WDTフィード（初期化時間を確保）
   // esp_task_wdt_reset();
@@ -934,7 +1040,11 @@ void loop() {
   if (M5.BtnA.wasPressed()) {
     uint32_t now = millis();
     
-    if (testPatternActive) {
+    if (performanceTestMode) {
+      // パフォーマンステストモード：簡易テスト実行
+      Serial.println("[PerfTest] Running quick performance test...");
+      PerformanceTest::runQuickPerformanceTest(&sphereManager);
+    } else if (testPatternActive) {
       // テストパターンモード中：パターン切り替え（CoreTask無効化中）
       // core1Task.switchTestPattern();
       Serial.println("Switched test pattern (CoreTask disabled)");
@@ -968,16 +1078,69 @@ void loop() {
     lastBtnPressMs = millis(); // 連続入力防止
   }
   
-  // ボタンBでテストパターンモード終了
-  if (M5.BtnB.wasPressed() && testPatternActive) {
-    testPatternActive = false;
-    // core1Task.exitTestPatternMode();
-    Serial.println("Exited test pattern mode (CoreTask disabled)");
+  // ボタンBでテストパターン/パフォーマンステストモード終了
+  if (M5.BtnB.wasPressed() && (testPatternActive || performanceTestMode)) {
+    if (performanceTestMode) {
+      performanceTestMode = false;
+      Serial.println("Exited performance test mode");
+      M5.Display.fillScreen(TFT_BLACK);
+      M5.Display.setTextColor(TFT_GREEN);
+      M5.Display.setCursor(10, 50);
+      M5.Display.println("Performance");
+      M5.Display.println("Test Mode OFF");
+      delay(1000);
+    } else {
+      testPatternActive = false;
+      // core1Task.exitTestPatternMode();
+      Serial.println("Exited test pattern mode (CoreTask disabled)");
+    }
   }
 
   if (M5.BtnPWR.wasClicked()) {
-    Serial.println("[IMU] Calibration requested from power button (CoreTask disabled)");
-    // core1Task.requestImuCalibration();
+    if (!performanceTestMode && !testPatternActive) {
+      // パフォーマンステストモードに切り替え
+      performanceTestMode = true;
+      Serial.println("[PerfTest] Entered performance test mode");
+      
+      M5.Display.fillScreen(TFT_BLACK);
+      M5.Display.setTextColor(TFT_CYAN);
+      M5.Display.setTextSize(1);
+      M5.Display.setCursor(0, 0);
+      M5.Display.println("=== PERF TEST MODE ===");
+      M5.Display.println("A: Run quick test");
+      M5.Display.println("B: Exit mode");
+      M5.Display.println("PWR: Full test suite");
+      delay(2000);
+    } else if (performanceTestMode) {
+      // フルテストスイート実行
+      Serial.println("[PerfTest] Running full test suite...");
+      
+      M5.Display.fillScreen(TFT_BLACK);
+      M5.Display.setTextColor(TFT_YELLOW);
+      M5.Display.setCursor(0, 0);
+      M5.Display.println("Full Performance Test");
+      M5.Display.println("Starting...");
+      
+      auto results = perfTester.testAllPatterns();
+      
+      // 結果をシリアルに詳細表示
+      for (const auto& pair : results) {
+        perfTester.printResults(pair.second, pair.first.c_str());
+      }
+    } else {
+      Serial.println("[IMU] Calibration requested from power button (CoreTask disabled)");
+      // core1Task.requestImuCalibration();
+    }
+  }
+
+  // IMUデータ更新（100Hz目標 = 10ms間隔）
+  static uint32_t lastImuUpdateMs = 0;
+  if (millis() - lastImuUpdateMs >= 10) {
+    ImuService::Reading imuReading;
+    if (imuService.read(imuReading)) {
+      sharedState.updateImuReading(imuReading);
+    }
+    lastImuUpdateMs = millis();
   }
 
   if (millis() - lastUpdate > 2000) {  // 2秒間隔

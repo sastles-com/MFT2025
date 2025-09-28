@@ -12,7 +12,7 @@
 
 namespace buzzer {
 
-constexpr gpio_num_t kDefaultGpio = static_cast<gpio_num_t>(8);
+constexpr gpio_num_t kDefaultGpio = static_cast<gpio_num_t>(39);
 constexpr uint8_t kLedcChannel = 1;
 constexpr uint32_t kLedcBaseFrequency = 12000;
 constexpr uint8_t kLedcResolutionBits = 8;

@@ -40,9 +40,25 @@ class MqttService {
   std::string broker_;
   uint16_t port_ = 1883;
   std::string clientId_;
+  
+  // Backward compatibility topics
   std::string topicUi_;
-  std::string topicStatus_;
   std::string topicImage_;
+  std::string topicCommand_;
+  
+  // Individual device topics  
+  std::string topicUiIndividual_;
+  std::string topicImageIndividual_;
+  std::string topicCommandIndividual_;
+  std::string topicStatus_;
+  std::string topicInput_;
+  
+  // Broadcast topics
+  std::string topicUiAll_;
+  std::string topicImageAll_;
+  std::string topicCommandAll_;
+  std::string topicSync_;
+  std::string topicEmergency_;
 
   ConfigManager::WifiConfig wifiConfig_{};
 

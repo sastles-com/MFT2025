@@ -86,12 +86,7 @@ public:
     static constexpr size_t LEDS_PER_STRIP = 200;
 
 private:
-    // コンポーネント管理
-    std::unique_ptr<LEDLayoutManager> layoutManager_;
-    std::unique_ptr<SphereCoordinateTransform> coordinateTransform_;
-    std::unique_ptr<FastLEDController> ledController_;
-    std::unique_ptr<UVCoordinateCache> uvCache_;
-    std::unique_ptr<PerformanceMonitor> performanceMonitor_;
+    // コンポーネント管理（パフォーマンステスト用スタブとして削除）
     
     // システム状態
     bool initialized_;

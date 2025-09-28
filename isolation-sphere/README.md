@@ -53,6 +53,9 @@ flowchart TD
 - **ディスプレイ**: 内蔵LCD + 800球WS2812 LEDストリップ×4
 - **センサー**: BNO055 IMUセンサー
 - **ストレージ**: LittleFS (3MB) + PSRam (3MB)
+- **GPIO構成**:
+  - **GPIO 5/6/7/8**: WS2812 LEDストリップ（4本）
+  - **GPIO 39**: スピーカー/ブザー出力
 
 ### ソフトウェア
 
@@ -104,9 +107,14 @@ pio device monitor -b 115200
 ## 📁 プロジェクト構造
 
 ```text
+```text
 ├── src/
-│   └── main.cpp              # メインプログラム
-├── include/                  # ヘッダーファイル
+│   ├── main.cpp              # メインプログラム
+│   └── core/
+│       └── CoreTasks.cpp     # SphereCore0Task/SphereCore1Task実装
+├── include/
+│   └── core/
+│       └── SphereCoreTask.h  # Sphere専用CoreTaskヘッダー
 ├── lib/                      # プロジェクト専用ライブラリ
 ├── test/                     # ユニットテスト
 ├── spiffs_dir/              # LittleFSアセット
@@ -118,6 +126,17 @@ pio device monitor -b 115200
 │       ├── demo02/          # デモ動画2
 │       └── demo03/          # デモ動画3
 ├── platformio.ini           # PlatformIO設定
+```
+
+### 🚨 重要: CoreTask分離アーキテクチャ
+
+このプロジェクトは**Sphere専用のCoreTask**を使用します：
+
+- **使用するクラス**: `SphereCore0Task` / `SphereCore1Task`
+- **使用するファイル**: `include/core/SphereCoreTask.h`, `src/core/SphereCoreTask.cpp`
+- **⚠️ 禁止**: `JoystickCoreTask`関連ファイルの配置や参照
+
+joystick プロジェクトとは完全に分離されており、相互の変更による影響を防いでいます。
 ├── partitions.csv           # ESP32パーティション定義
 ├── isolation_sphere_spec.md # 技術仕様書
 ├── isolation_sphere_tasks.md # 実装タスク一覧

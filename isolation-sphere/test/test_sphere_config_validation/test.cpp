@@ -2,6 +2,9 @@
 #include <cstring>
 #include "system/SystemNameMigration.h"
 
+// system_name_migration_tests.cpp で定義される登録関数
+void registerSystemNameMigrationTests();
+
 #if __has_include("mqtt/MqttBroker.h")
 #define HAS_MQTT_BROKER 1
 #else
@@ -229,22 +232,8 @@ void setup() {
   RUN_TEST(test_refactor_plan_simplified);
   RUN_TEST(test_tdd_red_phase_correct_approach);
   RUN_TEST(test_green_phase_preparation);
-  RUN_TEST(test_migrate_lower_boundary);
-  RUN_TEST(test_migrate_upper_boundary);
-  RUN_TEST(test_invalid_prefix_mixed);
-  RUN_TEST(test_invalid_missing_dash);
-  RUN_TEST(test_invalid_too_many_digits);
-  RUN_TEST(test_invalid_too_few_digits_source);
-  RUN_TEST(test_invalid_trailing_space);
-  RUN_TEST(test_invalid_leading_space);
-  RUN_TEST(test_invalid_uppercase_prefix);
-  RUN_TEST(test_null_output_buffer);
-  RUN_TEST(test_exact_size_success);
-  RUN_TEST(test_insufficient_size_fail);
-  RUN_TEST(test_fail_does_not_modify_buffer);
-  RUN_TEST(test_inplace_migration);
-  RUN_TEST(test_valid_plus_newline_is_invalid);
-  RUN_TEST(test_is_valid_null);
+  // 詳細な移行テスト群を外部登録
+  registerSystemNameMigrationTests();
   UNITY_END();
 }
 void loop() {}
@@ -262,22 +251,7 @@ int main() {
   RUN_TEST(test_refactor_plan_simplified);
   RUN_TEST(test_tdd_red_phase_correct_approach);
   RUN_TEST(test_green_phase_preparation);
-  RUN_TEST(test_migrate_lower_boundary);
-  RUN_TEST(test_migrate_upper_boundary);
-  RUN_TEST(test_invalid_prefix_mixed);
-  RUN_TEST(test_invalid_missing_dash);
-  RUN_TEST(test_invalid_too_many_digits);
-  RUN_TEST(test_invalid_too_few_digits_source);
-  RUN_TEST(test_invalid_trailing_space);
-  RUN_TEST(test_invalid_leading_space);
-  RUN_TEST(test_invalid_uppercase_prefix);
-  RUN_TEST(test_null_output_buffer);
-  RUN_TEST(test_exact_size_success);
-  RUN_TEST(test_insufficient_size_fail);
-  RUN_TEST(test_fail_does_not_modify_buffer);
-  RUN_TEST(test_inplace_migration);
-  RUN_TEST(test_valid_plus_newline_is_invalid);
-  RUN_TEST(test_is_valid_null);
+  registerSystemNameMigrationTests();
   return UNITY_END();
 }
 #endif

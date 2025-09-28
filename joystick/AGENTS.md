@@ -27,6 +27,17 @@
 
 ## 機能リスト
 
+### Buzzer機能（JoystickBuzzer）
+
+- **ハードウェア**: M5Stack Atom JoyStick内蔵パッシブブザー@5020
+- **実装方式**: ESP32 PWM制御 (GPIO5経由)
+- **対応周波数**: 200Hz～2000Hz (テスト範囲)
+- **機能**:
+  - 音階テスト: ドレミファソラシド (C4-C5)
+  - 周波数スイープテスト: 200-2000Hz
+  - メロディ再生: 起動音、クリック音、エラー音等
+  - インタラクティブテスト: ボタンでテストモード切替
+
 ### config.json読み込み機能（ConfigManager）
 
 ### WiFi AP機能（外部WiFi接続なし）
@@ -42,13 +53,22 @@
 
 ### joystick
 
-- stampfly用のjoystickを流用（["switch science"](https://www.switch-science.com/products/9819?_pos=4&_sid=1d9aad1f7&_ss=r)）し，これを使ってisolation-sphereをコントロールする
-  - アナログスティック２基
-  - アナログスティック押し込み２基
-  - ボタン２基
-  - M5atomのLCDボタン
+- **M5Stack Atom JoyStick** (K137) 公式仕様: https://docs.m5stack.com/en/app/Atom%20JoyStick
+  - **MCU**: STM32F030F4P6 + AtomS3 (ESP32-S3)
+  - **ブザー**: Built-in Passive Buzzer@5020 ← **重要！**
+  - **ジョイスティック**: デュアル Hallセンサー 5方向ジョイスティック × 2
+  - **ボタン**: 左右ファンクションボタン × 2
+  - **RGB LED**: WS2812C内蔵
+  - **バッテリー**: 300mAh高電圧リチウムバッテリー × 2
+  - **サイズ**: 84 x 60 x 31.5mm
+  - **重量**: 63.5g
+
+- **実装概要**:
+  - アナログスティック２基 (押し込み機能付き)
+  - ファンクションボタン２基  
+  - M5AtomのLCDボタン
   - IMUセンサを使ったコントロール
-- ESP32-S3R搭載の小型マイコンボード
+  - **内蔵パッシブブザーでメロディ再生対応**
 
 ## UI機能リスト
 
@@ -99,7 +119,10 @@
 - `config.json` の構造やモジュール毎の項目は `../doc/define_config.md` に記載されている。設定を追加・編集する場合は必ず同ドキュメントを更新し、分類ルールに従う。
 
 ## MQTT Topic Rules
-- 詳細なトピック設計ガイドは `../doc/mqtt_rules.md` に記載されています（`isolation-sphere` と共通）。実装時は必ず参照し、`sphere/ui/#` などの階層構造や JSON ペイロード運用の方針に従ってください。
+- **MQTTトピックに関する全ての設計・実装は `MQTT_RULES.md` を参照すること**
+- `MQTT_RULES.md` には全トピックリスト、ペイロード仕様、設計思想が記載されている
+- **新しいトピックを追加する場合は、必ず `MQTT_RULES.md` のトピックリストに追加すること**
+- `sphere/ui/#` などの階層構造や JSON ペイロード運用の方針に従ってください
 
 ## UI Rules
 - UI 実装ガイドは `../doc/ui_rules.md` を参照する（両プロジェクト共通）。

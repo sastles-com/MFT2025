@@ -28,6 +28,9 @@ class SharedState {
 
   void pushUiCommand(const std::string &command, bool external);
   bool popUiCommand(std::string &command, bool external);
+  
+  void pushSystemCommand(const std::string &command, bool external);
+  bool popSystemCommand(std::string &command, bool external);
 
  private:
   void lock() const;
@@ -48,4 +51,8 @@ class SharedState {
   bool hasUiCommandIncoming_ = false;
   std::string uiCommandOutgoing_;
   bool hasUiCommandOutgoing_ = false;
+  std::string systemCommandIncoming_;
+  bool hasSystemCommandIncoming_ = false;
+  std::string systemCommandOutgoing_;
+  bool hasSystemCommandOutgoing_ = false;
 };

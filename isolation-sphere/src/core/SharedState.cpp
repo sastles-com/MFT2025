@@ -114,3 +114,32 @@ bool SharedState::popUiCommand(std::string &command, bool external) {
   unlock();
   return available;
 }
+
+void SharedState::pushSystemCommand(const std::string &command, bool external) {
+  lock();
+  if (external) {
+    systemCommandIncoming_ = command;
+    hasSystemCommandIncoming_ = true;
+  } else {
+    systemCommandOutgoing_ = command;
+    hasSystemCommandOutgoing_ = true;
+  }
+  unlock();
+}
+
+bool SharedState::popSystemCommand(std::string &command, bool external) {
+  lock();
+  bool available = external ? hasSystemCommandIncoming_ : hasSystemCommandOutgoing_;
+  if (available) {
+    command = external ? systemCommandIncoming_ : systemCommandOutgoing_;
+    if (external) {
+      hasSystemCommandIncoming_ = false;
+      systemCommandIncoming_.clear();
+    } else {
+      hasSystemCommandOutgoing_ = false;
+      systemCommandOutgoing_.clear();
+    }
+  }
+  unlock();
+  return available;
+}
