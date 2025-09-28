@@ -1,19 +1,19 @@
 #pragma once
-
-#include "config/ConfigManager.h"
+#include <Arduino.h>
 #include "core/CoreTask.h"
 #include "core/SharedState.h"
+#include "config/ConfigManager.h"
 #include "storage/StorageManager.h"
-#include "imu/ImuService.h"
 #include "ota/OtaService.h"
-#include "mqtt/MqttService.h"
-// WiFi and MQTT includes
 #include "wifi/WiFiManager.h"
-#include "mqtt/MqttBroker.h"
+#include "mqtt/MqttService.h"
 
 class Core0Task : public CoreTask {
  public:
-  Core0Task(const TaskConfig &config, ConfigManager &configManager, StorageManager &storageManager, SharedState &sharedState);
+  Core0Task(const TaskConfig &cfg,
+            ConfigManager &configManager,
+            StorageManager &storageManager,
+            SharedState &sharedState);
   ~Core0Task();
 
  protected:
@@ -21,22 +21,21 @@ class Core0Task : public CoreTask {
   void loop() override;
 
  private:
- ConfigManager &configManager_;
+  ConfigManager &configManager_;
   StorageManager &storageManager_;
   SharedState &sharedState_;
-  bool configLoaded_ = false;
-  OtaService otaService_;
-  bool otaInitialized_ = false;
-  uint32_t nextOtaRetryMs_ = 0;
-  MqttService mqttService_;
-  bool mqttConfigured_ = false;
-  // WiFi and MQTT members
   WiFiManager *wifiManager_ = nullptr;
+  OtaService otaService_;
+  MqttService mqttService_;   // sharedState_ を渡して構築
+
+  bool configLoaded_ = false;
   bool wifiConfigured_ = false;
-  MqttBroker *mqttBroker_ = nullptr;
-  bool mqttBrokerConfigured_ = false;
+  bool otaInitialized_ = false;
+  bool mqttConfigured_ = false;
+  uint32_t nextOtaRetryMs_ = 0;
 };
 
+// Core1Task は既存のまま（必要なら後で再実装）
 class Core1Task : public CoreTask {
  public:
   Core1Task(const TaskConfig &config, SharedState &sharedState);
@@ -46,21 +45,21 @@ class Core1Task : public CoreTask {
   void loop() override;
 
  private:
- enum class UiInteractionMode : std::uint8_t {
-   kNavigation,
-   kBrightnessAdjust,
-   kCentering,
- };
+  enum class UiInteractionMode : std::uint8_t {
+    kNavigation,
+    kBrightnessAdjust,
+    kCentering,
+  };
 
- SharedState &sharedState_;
+  SharedState &sharedState_;
   bool displayedConfig_ = false;
   ImuService imuService_;
   bool imuInitialized_ = false;
- bool imuEnabled_ = false;
- std::uint32_t imuIntervalMs_ = 33;
- std::uint32_t lastImuReadMs_ = 0;
- std::uint32_t nextImuRetryMs_ = 0;
- bool imuDebugLogging_ = false;
+  bool imuEnabled_ = false;
+  std::uint32_t imuIntervalMs_ = 33;
+  std::uint32_t lastImuReadMs_ = 0;
+  std::uint32_t nextImuRetryMs_ = 0;
+  bool imuDebugLogging_ = false;
   ConfigManager::ImuConfig imuConfig_{};
   bool gestureUiModeEnabled_ = false;
   bool uiModeActive_ = false;
@@ -72,6 +71,7 @@ class Core1Task : public CoreTask {
   static constexpr float kDefaultShakeThresholdMps2_ = 5.0f;
   static constexpr std::uint32_t kDefaultShakeWindowMs_ = 600;
   static constexpr std::uint32_t kShakeRefractoryMs_ = 200;
+
   void handleShakeGesture(const ImuService::Reading &reading);
   void enterUiMode();
   void exitUiMode();
@@ -81,13 +81,14 @@ class Core1Task : public CoreTask {
   void triggerLocalUiCommand(const char *command);
   void applyUiBrightnessSettings(bool entering);
   void processIncomingUiCommands();
+
 #ifdef UNIT_TEST
  public:
   void setImuHooksForTest(ImuService::Hooks hooks);
 #endif
 
  public:
- void markImuWireInitialized();
+  void markImuWireInitialized();
   void requestImuCalibration(std::uint8_t seconds = 10);
 
  private:
