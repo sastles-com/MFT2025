@@ -2,11 +2,12 @@
 
 #include <cstdint>
 
+#include "audio/BuzzerService.h"
+#include "config/ConfigManager.h"
 #include "core/CoreTask.h"
-#include "core/SphereCoreTask.h"
+#include "core/CoreTasks.h"
 #include "core/SharedState.h"
 #include "storage/StorageManager.h"
-#include "config/ConfigManager.h"
 
 namespace {
 class DummyTask : public CoreTask {
@@ -209,6 +210,88 @@ void test_core1_task_initializes_and_reads_imu_when_enabled() {
   TEST_ASSERT_EQUAL_UINT32(42, stored.timestampMs);
 }
 
+void test_core1_task_initializes_buzzer_when_enabled() {
+  SharedState shared;
+  ConfigManager::Config cfg;
+  cfg.system.name = "sphere-buzzer";
+  cfg.buzzer.enabled = true;
+  shared.updateConfig(cfg);
+
+  CoreTask::TaskConfig config;
+  config.name = "Core1";
+  config.loopIntervalMs = 0;
+  Core1Task task(config, shared);
+
+  bool initCalled = false;
+  bool startupCalled = false;
+  BuzzerService::Hooks hooks;
+  hooks.init = [&](gpio_num_t gpio) {
+    initCalled = (gpio == buzzer::kDefaultGpio);
+    return buzzer::Result::kOk;
+  };
+  hooks.playEffect = [&](buzzer::Effect effect) {
+    if (effect == buzzer::Effect::kStartup) {
+      startupCalled = true;
+    }
+    return buzzer::Result::kOk;
+  };
+  hooks.stop = []() { return buzzer::Result::kOk; };
+#ifdef UNIT_TEST
+  task.setBuzzerHooksForTest(hooks);
+#endif
+
+  CoreTask::Hooks coreHooks;
+  coreHooks.launch = [](CoreTask &t) {
+    t.runOnceForTest();
+    return true;
+  };
+  task.setHooks(coreHooks);
+
+  TEST_ASSERT_TRUE(task.start());
+  TEST_ASSERT_TRUE(initCalled);
+  TEST_ASSERT_TRUE(startupCalled);
+}
+
+void test_core1_task_skips_buzzer_when_disabled() {
+  SharedState shared;
+  ConfigManager::Config cfg;
+  cfg.system.name = "sphere-no-buzzer";
+  cfg.buzzer.enabled = false;
+  shared.updateConfig(cfg);
+
+  CoreTask::TaskConfig config;
+  config.name = "Core1";
+  config.loopIntervalMs = 0;
+  Core1Task task(config, shared);
+
+  bool initCalled = false;
+  bool startupCalled = false;
+  BuzzerService::Hooks hooks;
+  hooks.init = [&](gpio_num_t) {
+    initCalled = true;
+    return buzzer::Result::kOk;
+  };
+  hooks.playEffect = [&](buzzer::Effect) {
+    startupCalled = true;
+    return buzzer::Result::kOk;
+  };
+  hooks.stop = []() { return buzzer::Result::kOk; };
+#ifdef UNIT_TEST
+  task.setBuzzerHooksForTest(hooks);
+#endif
+
+  CoreTask::Hooks coreHooks;
+  coreHooks.launch = [](CoreTask &t) {
+    t.runOnceForTest();
+    return true;
+  };
+  task.setHooks(coreHooks);
+
+  TEST_ASSERT_TRUE(task.start());
+  TEST_ASSERT_FALSE(initCalled);
+  TEST_ASSERT_FALSE(startupCalled);
+}
+
 void setUp() {}
 void tearDown() {}
 
@@ -220,6 +303,8 @@ int runUnityTests() {
   RUN_TEST(test_core0_task_updates_shared_state);
   RUN_TEST(test_core1_task_reads_shared_state);
   RUN_TEST(test_core1_task_initializes_and_reads_imu_when_enabled);
+  RUN_TEST(test_core1_task_initializes_buzzer_when_enabled);
+  RUN_TEST(test_core1_task_skips_buzzer_when_disabled);
   return UNITY_END();
 }
 

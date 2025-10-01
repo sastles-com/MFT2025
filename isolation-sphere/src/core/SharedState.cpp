@@ -1,4 +1,5 @@
 #include "core/SharedState.h"
+#include <Arduino.h>
 
 SharedState::SharedState() {
 #ifndef UNIT_TEST
@@ -73,6 +74,8 @@ void SharedState::setUiMode(bool active) {
   lock();
   uiModeActive_ = active;
   hasUiMode_ = true;
+  // Debug log so we can trace who toggles UI mode on the device
+  Serial.printf("[SharedState] setUiMode -> %s\n", active ? "ON" : "OFF");
   unlock();
 }
 

@@ -37,6 +37,8 @@ class ImuService {
   bool read(Reading &out);
 
   void requestCalibration(std::uint8_t seconds = 10);
+  bool isCalibrationActive() const;
+  bool pollCalibrationCompleted();
 
 #ifdef UNIT_TEST
   void setHooksForTest(Hooks hooks);
@@ -59,10 +61,12 @@ class ImuService {
   bool calibrationActive_ = false;
   std::uint8_t calibrationCountdown_ = 0;
   std::uint32_t calibrationNextTickMs_ = 0;
+  bool calibrationJustCompleted_ = false;
   static constexpr std::uint8_t kCalibrationStrength_ = 64;
   void startCalibration(std::uint8_t seconds);
   void processCalibrationTick();
-#else
+#endif
+#if defined(IMU_SENSOR_BNO055)
   std::unique_ptr<class Adafruit_BNO055> bno_;
 #endif
 };

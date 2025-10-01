@@ -1,6 +1,7 @@
 #include "pattern/ProceduralPatternGenerator.h"
 #include "led/LEDSphereManager.h"
 #include <cmath>
+#include "pattern/TestStripPattern.h"
 
 namespace ProceduralPattern {
 

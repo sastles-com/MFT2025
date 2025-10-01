@@ -121,7 +121,20 @@
       "strip_gpios": [5, 6, 7, 8],
       "num_strips": 4,
       "leds_per_strip": [180, 220, 180, 220],
-      "total_leds": 800
+      "total_leds": 800,
+      "led_type": "WS2812B",
+      "color_order": "GRB",
+      "use_psram_buffers": true,
+      "double_buffer": true,
+      "dma_mode": "auto",
+      "led_update_rate_hz": 60,
+      "max_brightness": 200,
+      "per_strip": [
+        { "index": 0, "gpio": 5, "length": 180, "offset": [0,0,0] },
+        { "index": 1, "gpio": 6, "length": 220, "offset": [0,0,0] },
+        { "index": 2, "gpio": 7, "length": 180, "offset": [0,0,0] },
+        { "index": 3, "gpio": 8, "length": 220, "offset": [0,0,0] }
+      ]
     },
     "buzzer": {
       "enabled": true,

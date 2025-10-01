@@ -1,0 +1,3 @@
+# 退避コピー
+
+main関数重複を避けるため退避。元ファイル: test/test_shake_detector/test.cpp

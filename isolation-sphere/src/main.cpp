@@ -1,3 +1,4 @@
+// --- ここから元の統合ファームウェア main.cpp ---
 #include <FastLED.h>
 #include <Preferences.h>
 #include <WiFi.h>
@@ -14,6 +15,8 @@
 #include "display/DisplayController.h"
 #include "hardware/HardwareContext.h"
 #include "imu/ImuService.h"
+#include "imu/ShakeDetector.h"
+#include "imu/ShakeToUiBridge.h"
 #include "storage/StorageManager.h"
 #include "storage/StorageStager.h"
 
@@ -35,75 +38,34 @@ class M5DisplayDriver : public HardwareContext::DisplayDriver {
   void fillScreen(std::uint16_t color) override { M5.Display.fillScreen(color); }
 };
 
+
 class M5HardwareContext : public HardwareContext {
  public:
   HardwareContext::DisplayDriver &display() override { return displayDriver_; }
-
  private:
   M5DisplayDriver displayDriver_;
 };
 
-// PSRAM検出・テスト関数
-void testPSRAM() {
-  Serial.println("\n=== PSRAM Test Start ===");
-  
-  const char* name;
-  switch (M5.getBoard()) {
-      case m5::board_t::board_M5StackCoreS3:  name = "StackS3";     break;
-      case m5::board_t::board_M5AtomS3Lite:   name = "ATOMS3Lite";  break;
-      case m5::board_t::board_M5AtomS3:       name = "ATOMS3";      break;
-      case m5::board_t::board_M5StampC3:      name = "StampC3";     break;
-      case m5::board_t::board_M5StampS3:      name = "StampS3";     break;
-      case m5::board_t::board_M5StampC3U:     name = "StampC3U";    break;
-      case m5::board_t::board_M5Stack:        name = "Stack";       break;
-      case m5::board_t::board_M5StackCore2:   name = "StackCore2";  break;
-      case m5::board_t::board_M5StickC:       name = "StickC";      break;
-      case m5::board_t::board_M5StickCPlus:   name = "StickCPlus";  break;
-      case m5::board_t::board_M5StackCoreInk: name = "CoreInk";     break;
-      case m5::board_t::board_M5Paper:        name = "Paper";       break;
-      case m5::board_t::board_M5Tough:        name = "Tough";       break;
-      case m5::board_t::board_M5Station:      name = "Station";     break;
-      case m5::board_t::board_M5Atom:         name = "ATOM";        break;
-      case m5::board_t::board_M5AtomPsram:    name = "ATOM PSRAM";  break;
-      case m5::board_t::board_M5AtomU:        name = "ATOM U";      break;
-      case m5::board_t::board_M5TimerCam:     name = "TimerCamera"; break;
-      case m5::board_t::board_M5StampPico:    name = "StampPico";   break;
-      case m5::board_t::board_M5AtomS3R:      name = "M5AtomS3R";   break;
-      case m5::board_t::board_M5AtomS3U:      name = "M5AtomS3U";   break;
-      default:                                name = "Who am I ?";  break;
-  }
-  Serial.println(name);
-  
-  // PSRAMの初期化
-  if (!psramInit()) {
-      Serial.println("✗ PSRAM初期化失敗");
-  } else {
-      Serial.println("✓ PSRAM初期化成功");
-      Serial.printf("Total PSRAM : %u bytes (%.2f MB)\n", ESP.getPsramSize(), ESP.getPsramSize() / 1024.0 / 1024.0);
-      Serial.printf("Free  PSRAM : %u bytes (%.2f MB)\n", ESP.getFreePsram(), ESP.getFreePsram() / 1024.0 / 1024.0);
-  }
-
-  void* psram_buffer = heap_caps_malloc(1024 * 1024, MALLOC_CAP_SPIRAM);
-  if (psram_buffer == NULL) {
-      Serial.println("✗ PSRAMからメモリ確保失敗");
-  } else {
-      Serial.println("✓ PSRAMからメモリ確保成功");
-      Serial.printf("Total PSRAM : %u bytes (%.2f MB)\n", ESP.getPsramSize(), ESP.getPsramSize() / 1024.0 / 1024.0);
-      Serial.printf("Free  PSRAM : %u bytes (%.2f MB)\n", ESP.getFreePsram(), ESP.getFreePsram() / 1024.0 / 1024.0);
-      free(psram_buffer);
-  }    
-  
-  Serial.println("=== PSRAM Test End ===\n");
-}
-
-#define LED_PIN 35        // AtomS3R内蔵LED
+// ...existing code...
+// --- 必要なグローバル定義（ビルドエラー対策） ---
+#define BUTTON_PIN 41
 #define NUM_LEDS 1
-#define BUTTON_PIN 41     // AtomS3Rボタン
-
+#define LED_PIN 35
 CRGB leds[NUM_LEDS];
 StorageManager storageManager;
 SharedState sharedState;
 ImuService imuService;
+// Runtime: UI shake detector + bridge (created in setup())
+ShakeDetector* uiShakeDetector = nullptr;
+ShakeToUiBridge* shakeToUiBridge = nullptr;
+
+// ダミーPSRAMテスト関数（必要に応じて本来の実装に差し替え）
+void testPSRAM() {
+  Serial.println("[PSRAM] testPSRAM() called (dummy)");
+}
+
+// NOTE: UNIT_TEST dummy setup/loop is provided earlier in this file to
+// avoid multiple definitions. Keep only the earlier occurrence.
 
 namespace {
 
@@ -245,7 +207,19 @@ void drawImuVisualization(const ImuService::Reading &reading, bool highlight) {
   auto p0 = rotateYaw(0.0f, -pointerLen);
   auto p1 = rotateYaw(-12.0f, pointerLen);
   auto p2 = rotateYaw(12.0f, pointerLen);
-  uint32_t pointerColor = highlight ? TFT_RED : TFT_CYAN;
+  // pointer color: highlight (e.g., error) -> red, UI mode -> green, otherwise cyan/blue
+  uint32_t pointerColor;
+  if (highlight) {
+    pointerColor = TFT_RED;
+  } else {
+    // read UI mode from sharedState; default false
+    bool uiMode = false;
+    if (sharedState.getUiMode(uiMode) && uiMode) {
+      pointerColor = TFT_GREEN;
+    } else {
+      pointerColor = TFT_CYAN; // UI off -> blueish
+    }
+  }
   M5.Display.fillTriangle(p0.first, p0.second, p1.first, p1.second, p2.first, p2.second, pointerColor);
 
   M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
@@ -802,6 +776,22 @@ void setup() {
 #endif
   // core1Task.markImuWireInitialized(); // TODO: Implement proper CoreTasks
 
+  // Configure UI shake detection from config (if available)
+  {
+    // default values
+    uint8_t triggerCount = 3;
+    uint32_t windowMs = 900;
+    if (configManager.isLoaded()) {
+      const auto &cfg = configManager.config();
+      triggerCount = static_cast<uint8_t>(cfg.imu.uiShakeTriggerCount);
+      windowMs = cfg.imu.uiShakeWindowMs;
+    }
+    // create detector and bridge
+    uiShakeDetector = new ShakeDetector(2.0f, static_cast<int>(triggerCount), windowMs, 2000, 1000);
+    shakeToUiBridge = new ShakeToUiBridge(sharedState, static_cast<int>(triggerCount));
+    Serial.printf("[IMU] UI shake detector configured: triggerCount=%d windowMs=%lu\n", triggerCount, (unsigned long)windowMs);
+  }
+
 
   BootOrchestrator bootOrchestrator(storageManager, configManager, sharedState, bootCallbacks, bootServices);
   if (!bootOrchestrator.run()) {
@@ -1139,6 +1129,14 @@ void loop() {
     ImuService::Reading imuReading;
     if (imuService.read(imuReading)) {
       sharedState.updateImuReading(imuReading);
+      // Feed IMU accelerations to shake detector (if configured)
+      if (uiShakeDetector && shakeToUiBridge) {
+        bool detected = uiShakeDetector->update(imuReading.ax, imuReading.ay, imuReading.az, imuReading.timestampMs);
+        if (detected) {
+          Serial.println("[IMU] Shake detected -> notifying ShakeToUiBridge");
+          shakeToUiBridge->onShakeDetected();
+        }
+      }
     }
     lastImuUpdateMs = millis();
   }
@@ -1210,3 +1208,10 @@ void loop() {
 }
 
 #endif  // UNIT_TEST
+
+
+#ifdef UNIT_TEST
+// --- PlatformIO test build用ダミー ---
+void setup() {}
+void loop() {}
+#endif

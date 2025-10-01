@@ -3,10 +3,13 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <cmath>
+
 #if defined(IMU_SENSOR_BMI270)
 #include <M5Unified.h>
 #include <MadgwickAHRS.h>
-#else
+#endif
+
+#if defined(IMU_SENSOR_BNO055)
 #include <Adafruit_BNO055.h>
 #endif
 
@@ -138,7 +141,7 @@ void ImuService::ensureDefaultHooks() {
       return true;
     };
   }
-#else
+#elif defined(IMU_SENSOR_BNO055)
   if (!wire_) {
     wire_ = &Wire1;
   }
@@ -181,11 +184,34 @@ void ImuService::requestCalibration(std::uint8_t seconds) {
   if (!usingDefaultHooks_ || !initialized_) {
     return;
   }
+  calibrationJustCompleted_ = false;
   startCalibration(seconds == 0 ? 10 : seconds);
 #else
   (void)seconds;
 #endif
 }
+
+#if defined(IMU_SENSOR_BMI270)
+bool ImuService::isCalibrationActive() const {
+  return calibrationActive_;
+}
+
+bool ImuService::pollCalibrationCompleted() {
+  if (calibrationJustCompleted_) {
+    calibrationJustCompleted_ = false;
+    return true;
+  }
+  return false;
+}
+#else
+bool ImuService::isCalibrationActive() const {
+  return false;
+}
+
+bool ImuService::pollCalibrationCompleted() {
+  return false;
+}
+#endif
 
 #if defined(IMU_SENSOR_BMI270)
 void ImuService::startCalibration(std::uint8_t seconds) {
@@ -195,6 +221,7 @@ void ImuService::startCalibration(std::uint8_t seconds) {
   calibrationActive_ = true;
   calibrationCountdown_ = seconds;
   calibrationNextTickMs_ = millis() + 1000;
+  calibrationJustCompleted_ = false;
   Serial.printf("[IMU] Calibration started (%u s)\n", static_cast<unsigned>(seconds));
   M5.Imu.setCalibration(kCalibrationStrength_, kCalibrationStrength_, kCalibrationStrength_);
 }
@@ -219,6 +246,7 @@ void ImuService::processCalibrationTick() {
       Serial.println("[IMU] Calibration saved to NVS");
     }
     calibrationActive_ = false;
+    calibrationJustCompleted_ = true;
   }
 }
 #endif

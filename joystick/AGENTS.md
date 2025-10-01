@@ -118,11 +118,14 @@
 - LittleFS にアップロードするアセットは `/Users/katano/Documents/PlatformIO/Projects/MFT2025/data` に集約される。`pio run -t buildfs/uploadfs` 前にこのディレクトリを同期し、共通設定ファイル `config.json` を必ず参照する。
 - `config.json` の構造やモジュール毎の項目は `../doc/define_config.md` に記載されている。設定を追加・編集する場合は必ず同ドキュメントを更新し、分類ルールに従う。
 
+
 ## MQTT Topic Rules
-- **MQTTトピックに関する全ての設計・実装は `MQTT_RULES.md` を参照すること**
-- `MQTT_RULES.md` には全トピックリスト、ペイロード仕様、設計思想が記載されている
-- **新しいトピックを追加する場合は、必ず `MQTT_RULES.md` のトピックリストに追加すること**
-- `sphere/ui/#` などの階層構造や JSON ペイロード運用の方針に従ってください
+
+**MQTTトピックに関する全ての設計・実装は `/doc/mqtt_rules.md` を参照すること**
+`/doc/mqtt_rules.md` は「MFT2025システム全体・全デバイス共通のMQTT設計の単一情報源（Single Source of Truth）」として機能します。
+全トピックリスト、ペイロード仕様、設計思想、画像転送・UI制御・システム監視までを網羅しています。
+**新しいトピックを追加・変更する場合は、必ず `/doc/mqtt_rules.md` のトピックリストに反映すること**
+`sphere/ui/#` などの階層構造や JSON ペイロード運用の方針に従ってください
 
 ## UI Rules
 - UI 実装ガイドは `../doc/ui_rules.md` を参照する（両プロジェクト共通）。

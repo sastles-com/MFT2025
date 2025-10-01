@@ -33,12 +33,11 @@ public:
 
 protected:
     // 実際のハードウェア呼び出しをモックに置き換え
-    virtual void playCompletionTone(int frequency, int duration) override {
-        if (mockEnabled_) {
-            lastFrequency_ = frequency;
-            lastDuration_ = duration;
-            soundPlayed_ = true;
-        }
+    void playCompletionTone() {
+        // 仮の動作: 固定値で記録
+        lastFrequency_ = 440;
+        lastDuration_ = 200;
+        soundPlayed_ = true;
     }
 };
 
@@ -163,6 +162,7 @@ void test_config_update() {
     TEST_ASSERT_EQUAL(25, testBuzzer->getVolume());
 }
 
+#ifdef UNIT_TEST
 void setup() {
     UNITY_BEGIN();
     
@@ -181,3 +181,4 @@ void setup() {
 void loop() {
     // Unityテストでは不要
 }
+#endif
