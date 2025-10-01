@@ -31,6 +31,7 @@
 - `src/main.cpp` contains the firmware entry points (`setup()` and `loop()`); keep hardware abstractions in separate translation units once they stabilize.
 - Place shared headers in `include/` and reusable components or vendor forks in `lib/`; prepend module directories with the subsystem (e.g., `display_led/`).
 - Add Unity test suites under `test/`; mirror the runtime module layout to keep fixtures discoverable.
+- 起動シーケンス全体の流れは `doc/boot_sequence.md` に集約（更新時は同ドキュメントも必ず修正）。
 
 ## Build, Test, and Development Commands
 - `pio run` builds the active environment; append `-e atoms3r` explicitly when you script CI tasks.
@@ -117,6 +118,10 @@ class SphereVideoMode : public UIMode { /* 映像管理特化 */ };
 class JoystickIsolationSphereMode : public UIMode { /* MQTT送信特化 */ };
 class JoystickVideoManagementMode : public UIMode { /* 動画選択特化 */ };
 ```
+
+## Image → LED mapping guide
+
+See `doc/image_to_led.md` for the JPEG/image → per-LED RGB mapping workflow, PSRAM/DMA considerations, and recommended class/module layout (LedLayout, ImageRenderer, ProceduralRenderer, Compositor, StripController). This is the canonical reference for implementing image playback and compositing on the sphere.
 
 #### Phase 2: CommunicationService分離 [優先度: 高] 📡
 
