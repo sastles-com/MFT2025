@@ -90,6 +90,12 @@ class ConfigManager {
     std::uint8_t uiShakeTriggerCount = 3;
     std::uint32_t uiShakeWindowMs = 900;
   };
+    // LED hardware configuration
+    struct LedConfig {
+      uint8_t numStrips = 4;
+      std::vector<uint16_t> ledsPerStrip; // per-strip lengths
+      std::vector<uint8_t> stripGpios;    // per-strip GPIO pins
+    } led;
 
   struct OtaConfig {
     bool enabled = false;

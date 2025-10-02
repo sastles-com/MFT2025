@@ -818,28 +818,21 @@ void setup() {
   
   // FastLED初期化（一時的に無効化してSPI競合を回避）
 #if defined(USE_FASTLED)
-  Serial.println("Initializing FastLED...");
-  FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, NUM_LEDS);
-  FastLED.setBrightness(50);  // 輝度50%
-  
-  // LED動作テスト
-  Serial.println("LED test starting...");
-  leds[0] = CRGB::Red;
-  FastLED.show();
-  delay(500);
-  
-  leds[0] = CRGB::Green;
-  FastLED.show();
-  delay(500);
-  
-  leds[0] = CRGB::Blue;
-  FastLED.show();
-  delay(500);
-  
-  leds[0] = CRGB::Black;
-  FastLED.show();
-  
-  Serial.println("FastLED initialized successfully!");
+  Serial.println("Initializing FastLED via LEDSphereManager...");
+  // Use runtime config to initialize multi-strip output if available
+  if (configManager.isLoaded()) {
+    const auto &cfg = configManager.config();
+    if (!cfg.led.ledsPerStrip.empty() && !cfg.led.stripGpios.empty()) {
+      sphereManager.initializeLedHardware(cfg.led.numStrips, cfg.led.ledsPerStrip, cfg.led.stripGpios);
+    } else {
+      Serial.println("[Main] LED config missing or incomplete, falling back to single-pin init");
+      FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, NUM_LEDS);
+    }
+  } else {
+    Serial.println("[Main] Config not loaded, using default FastLED init");
+    FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, NUM_LEDS);
+  }
+  FastLED.setBrightness(50);
 #else
   Serial.println("FastLED disabled (USE_FASTLED not defined)");
 #endif

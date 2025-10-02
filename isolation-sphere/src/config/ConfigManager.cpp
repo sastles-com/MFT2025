@@ -294,6 +294,38 @@ bool ConfigManager::load(const char *path) {
     config_.joystick = ConfigManager::JoystickConfig{};
   }
 
+  // LED hardware configuration: leds_per_strip and strip_gpios
+  const JsonVariantConst ledsCfg = doc["leds"];
+  if (!ledsCfg.isNull()) {
+    const JsonArrayConst perStrip = ledsCfg["leds_per_strip"].as<JsonArrayConst>();
+    if (!perStrip.isNull()) {
+      config_.led.numStrips = static_cast<uint8_t>(perStrip.size());
+      config_.led.ledsPerStrip.clear();
+      for (JsonVariantConst v : perStrip) {
+        config_.led.ledsPerStrip.push_back(static_cast<uint16_t>(v.as<uint32_t>()));
+      }
+    }
+    const JsonArrayConst gpios = ledsCfg["strip_gpios"].as<JsonArrayConst>();
+    if (!gpios.isNull()) {
+      config_.led.stripGpios.clear();
+      for (JsonVariantConst g : gpios) {
+        config_.led.stripGpios.push_back(static_cast<uint8_t>(g.as<uint32_t>()));
+      }
+      if (config_.led.numStrips == 0) {
+        config_.led.numStrips = static_cast<uint8_t>(config_.led.stripGpios.size());
+      }
+    }
+    // If ledsPerStrip empty but numStrips set, fill with default 200
+    if (config_.led.ledsPerStrip.empty() && config_.led.numStrips > 0) {
+      for (uint8_t i=0;i<config_.led.numStrips;i++) config_.led.ledsPerStrip.push_back(200);
+    }
+  } else {
+    // fallback defaults
+    config_.led.numStrips = 4;
+    config_.led.ledsPerStrip = {200,200,200,200};
+    config_.led.stripGpios = {5,6,7,8};
+  }
+
   loaded_ = true;
   Serial.printf("[Config] Configuration loaded successfully. WiFi enabled: %s, MQTT enabled: %s\n", 
                config_.wifi.enabled ? "true" : "false",

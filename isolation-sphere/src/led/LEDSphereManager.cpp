@@ -52,6 +52,66 @@ bool LEDSphereManager::initialize(const char* csvPath) {
     return true;
 }
 
+bool LEDSphereManager::initializeLedHardware(uint8_t numStrips, const std::vector<uint16_t>& ledsPerStrip, const std::vector<uint8_t>& stripGpios) {
+    Serial.printf("[LEDSphereManager] Initializing LED hardware: strips=%d\n", numStrips);
+    // Compute total LEDs
+    size_t total = 0;
+    for (size_t i=0;i<ledsPerStrip.size();++i) total += ledsPerStrip[i];
+    if (total == 0) {
+        Serial.println("[LEDSphereManager] No LEDs configured");
+        return false;
+    }
+
+    // Create or reallocate manager framebuffer
+    if (frameBuffer_) {
+        free(frameBuffer_);
+        frameBuffer_ = nullptr;
+        totalLeds_ = 0;
+    }
+    frameBuffer_ = (CRGB*)malloc(sizeof(CRGB) * total);
+    if (!frameBuffer_) {
+        Serial.println("[LEDSphereManager] Failed to allocate framebuffer");
+        return false;
+    }
+    memset(frameBuffer_, 0, sizeof(CRGB) * total);
+    totalLeds_ = total;
+
+    // Register each strip with FastLED using offsets into the single framebuffer
+    size_t offset = 0;
+    for (size_t s = 0; s < ledsPerStrip.size() && s < stripGpios.size(); ++s) {
+        uint8_t pin = stripGpios[s];
+        uint16_t count = ledsPerStrip[s];
+        Serial.printf("[LEDSphereManager] Registering strip %d: pin=%d count=%d offset=%u\n", (int)s, (int)pin, (int)count, (unsigned)offset);
+        // Use compile-time template instantiation for common pins (0..16). If pin is out of range, fall back to warning.
+        switch (pin) {
+            case 0: FastLED.addLeds<WS2812, 0, GRB>(&frameBuffer_[offset], count); break;
+            case 1: FastLED.addLeds<WS2812, 1, GRB>(&frameBuffer_[offset], count); break;
+            case 2: FastLED.addLeds<WS2812, 2, GRB>(&frameBuffer_[offset], count); break;
+            case 3: FastLED.addLeds<WS2812, 3, GRB>(&frameBuffer_[offset], count); break;
+            case 4: FastLED.addLeds<WS2812, 4, GRB>(&frameBuffer_[offset], count); break;
+            case 5: FastLED.addLeds<WS2812, 5, GRB>(&frameBuffer_[offset], count); break;
+            case 6: FastLED.addLeds<WS2812, 6, GRB>(&frameBuffer_[offset], count); break;
+            case 7: FastLED.addLeds<WS2812, 7, GRB>(&frameBuffer_[offset], count); break;
+            case 8: FastLED.addLeds<WS2812, 8, GRB>(&frameBuffer_[offset], count); break;
+            case 9: FastLED.addLeds<WS2812, 9, GRB>(&frameBuffer_[offset], count); break;
+            case 10: FastLED.addLeds<WS2812, 10, GRB>(&frameBuffer_[offset], count); break;
+            case 11: FastLED.addLeds<WS2812, 11, GRB>(&frameBuffer_[offset], count); break;
+            case 12: FastLED.addLeds<WS2812, 12, GRB>(&frameBuffer_[offset], count); break;
+            case 13: FastLED.addLeds<WS2812, 13, GRB>(&frameBuffer_[offset], count); break;
+            case 14: FastLED.addLeds<WS2812, 14, GRB>(&frameBuffer_[offset], count); break;
+            case 15: FastLED.addLeds<WS2812, 15, GRB>(&frameBuffer_[offset], count); break;
+            case 16: FastLED.addLeds<WS2812, 16, GRB>(&frameBuffer_[offset], count); break;
+            default:
+                Serial.printf("[LEDSphereManager] Unsupported GPIO pin for templated addLeds: %d. Skipping this strip.\n", (int)pin);
+                break;
+        }
+        offset += count;
+    }
+
+    Serial.printf("[LEDSphereManager] LED hardware initialized, total LEDs=%u\n", (unsigned)totalLeds_);
+    return true;
+}
+
 // ========== 姿勢・座標制御 ==========
 
 void LEDSphereManager::setIMUPosture(float qw, float qx, float qy, float qz) {

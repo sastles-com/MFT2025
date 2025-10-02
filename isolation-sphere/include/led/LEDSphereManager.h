@@ -86,6 +86,9 @@ public:
     static constexpr size_t LEDS_PER_STRIP = 200;
 
 private:
+    // Framebuffer for FastLED (owned)
+    CRGB* frameBuffer_ = nullptr;
+    size_t totalLeds_ = 0;
     // コンポーネント管理（パフォーマンステスト用スタブとして削除）
     
     // システム状態
@@ -106,6 +109,14 @@ public:
      * @return 初期化成功フラグ
      */
     bool initialize(const char* csvPath = "/led_layout.csv");
+    /**
+     * @brief Initialize hardware LED output using runtime config
+     * @param numStrips number of physical strips
+     * @param ledsPerStrip vector of per-strip lengths
+     * @param stripGpios vector of per-strip GPIO pins
+     * @return true on success
+     */
+    bool initializeLedHardware(uint8_t numStrips, const std::vector<uint16_t>& ledsPerStrip, const std::vector<uint8_t>& stripGpios);
     
     /**
      * @brief パフォーマンスモード設定
