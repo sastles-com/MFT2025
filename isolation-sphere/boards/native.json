@@ -1,0 +1,18 @@
+{
+  "build": {
+    "core": "native",
+    "extra_flags": "",
+    "f_cpu": "1000000000L",
+    "mcu": "host",
+    "variant": "native"
+  },
+  "frameworks": ["unity"],
+  "name": "PlatformIO Native Host",
+  "upload": {
+    "maximum_ram_size": 0,
+    "maximum_size": 0,
+    "protocol": "custom"
+  },
+  "url": "https://platformio.org/platforms/native",
+  "vendor": "PlatformIO"
+}

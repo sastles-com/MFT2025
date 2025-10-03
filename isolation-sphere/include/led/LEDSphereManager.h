@@ -346,6 +346,21 @@ public:
      * @param maxCount 出力する最大LED数
      */
     void printLEDLayout(size_t maxCount = 10) const;
+    
+    // ========== CUBE-neon実績実装: 画像ベース描画 ==========
+    
+    /**
+     * @brief 全LED更新（画像ベース、CUBE-neon移植）
+     * LED配置→IMU回転→UV変換→画像色抽出の完全フロー
+     */
+    void updateAllLEDsFromImage();
+    
+    /**
+     * @brief UV座標から画像色抽出
+     * @param u,v UV座標（CUBE-neon形式）
+     * @return RGB色
+     */
+    CRGB extractColorFromImageUV(float u, float v) const;
 
 #ifdef UNIT_TEST
 public:
@@ -373,6 +388,16 @@ private:
     
     // UV座標更新制御
     void updateUVCacheIfNeeded();
+    
+    // ========== CUBE-neon実績実装: 座標変換ヘルパー ==========
+    
+    /**
+     * @brief クォータニオン回転適用（CUBE-neon移植）
+     * @param x,y,z 入力3D座標
+     * @param out_x,out_y,out_z 出力回転済み座標
+     */
+    void applyQuaternionRotation(float x, float y, float z, 
+                                float& out_x, float& out_y, float& out_z) const;
 };
 
 /**

@@ -10,6 +10,9 @@
 #include <cstdio>
 #include <cmath>
 
+// 高速数学関数（CUBE-neonからの移植）
+#include "math/fast_math.h"
+
 #if defined(ARDUINO)
 #include <FS.h>
 #include <LittleFS.h>
@@ -242,12 +245,12 @@ float LEDSphereManager::computeLatitudeDeg(float x, float y, float z) {
     (void)x;
     (void)z;
     float clampedY = clampValue(y, -1.0f, 1.0f);
-    return radToDeg(asinf(clampedY));
+    return radToDeg(fast_asin(clampedY));
 }
 
 float LEDSphereManager::computeLongitudeDeg(float x, float y, float z) {
     (void)y;
-    return radToDeg(atan2f(z, x));
+    return radToDeg(fast_atan2(z, x));
 }
 
 float LEDSphereManager::wrappedLongitudeDifference(float aDeg, float bDeg) {
@@ -439,7 +442,7 @@ void LEDSphereManager::drawAxisMarkers() {
         markers.reserve(layoutPositions_.size());
 
         for (const auto& pos : layoutPositions_) {
-            float len = sqrtf(pos.x * pos.x + pos.y * pos.y + pos.z * pos.z);
+            float len = fast_sqrt(pos.x * pos.x + pos.y * pos.y + pos.z * pos.z);
             if (len <= 0.0001f) {
                 continue;
             }
@@ -498,8 +501,22 @@ std::vector<uint16_t> LEDSphereManager::findLEDsInRange(float u, float v, float 
 UVCoordinate LEDSphereManager::transformToUV(float x, float y, float z) const {
     Serial.printf("[LEDSphereManager] Transforming 3D(%.3f, %.3f, %.3f) to UV\n", x, y, z);
     
-    // TODO: 実際の座標変換
-    return UVCoordinate();
+    // CUBE-neon実績実装: IMU回転適用後のUV座標変換
+    // 1. IMUクォータニオンで3D座標を回転
+    float rotated_x, rotated_y, rotated_z;
+    applyQuaternionRotation(x, y, z, rotated_x, rotated_y, rotated_z);
+    
+    // 2. 球面座標変換（CUBE-neon方式）
+    // u = atan2(sqrt(x^2 + z^2), y)  // 緯度成分
+    // v = atan2(x, z)                // 経度成分
+    float u = fast_atan2(fast_sqrt(rotated_x * rotated_x + rotated_z * rotated_z), rotated_y);
+    float v = fast_atan2(rotated_x, rotated_z);
+    
+    UVCoordinate result;
+    result.u = u;
+    result.v = v;
+    
+    return result;
 }
 
 const LEDPosition* LEDSphereManager::getLEDPosition(uint16_t faceID) const {
@@ -610,9 +627,104 @@ bool LEDSphereManager::hasPostureChanged(const PostureParams& params) const {
            (abs(params.longitudeOffset - lastPosture_.longitudeOffset) > epsilon);
 }
 
+void LEDSphereManager::updateAllLEDsFromImage() {
+    if (!frameBuffer_ || !layoutLoaded_) {
+        Serial.println("[LEDSphereManager] Cannot update LEDs: framebuffer or layout not ready");
+        return;
+    }
+    
+    Serial.printf("[LEDSphereManager] Updating %zu LEDs from image using CUBE-neon method\n", layoutPositions_.size());
+    
+    // CUBE-neon実績実装: 全LEDループでIMU変換→UV変換→色抽出
+    for (size_t i = 0; i < layoutPositions_.size(); ++i) {
+        const auto& pos = layoutPositions_[i];
+        
+        // 1. LED座標取得
+        float x = pos.x;
+        float y = pos.y;
+        float z = pos.z;
+        
+        // 2. IMUクォータニオンで回転適用
+        float rotated_x, rotated_y, rotated_z;
+        applyQuaternionRotation(x, y, z, rotated_x, rotated_y, rotated_z);
+        
+        // 3. UV座標変換（CUBE-neon方式）
+        float u = fast_atan2(fast_sqrt(rotated_x * rotated_x + rotated_z * rotated_z), rotated_y);
+        float v = fast_atan2(rotated_x, rotated_z);
+        
+        // 4. 画像から色抽出
+        CRGB color = extractColorFromImageUV(u, v);
+        
+        // 5. LED色設定
+        uint16_t faceID = pos.faceID;
+        if (faceID < totalLeds_) {
+            frameBuffer_[faceID] = color;
+        }
+        
+        // デバッグ出力（最初のLEDのみ）
+        if (i == 0) {
+            Serial.printf("[LEDSphereManager] LED[0]: pos(%.3f,%.3f,%.3f) → rot(%.3f,%.3f,%.3f) → uv(%.3f,%.3f) → RGB(%d,%d,%d)\n",
+                         x, y, z, rotated_x, rotated_y, rotated_z, u, v, color.r, color.g, color.b);
+        }
+    }
+}
+
 void LEDSphereManager::updateUVCacheIfNeeded() {
     // TODO: UV座標キャッシュ更新判定と実行
     Serial.println("[LEDSphereManager] UV cache update check");
+}
+
+// ========== CUBE-neon実績実装: 座標変換ヘルパー関数 ==========
+
+void LEDSphereManager::applyQuaternionRotation(float x, float y, float z, 
+                                             float& out_x, float& out_y, float& out_z) const {
+    // CUBE-neonからの移植: クォータニオン回転適用
+    // q * v * q^(-1) の計算
+    float qw = lastPosture_.quaternionW;
+    float qx = lastPosture_.quaternionX;
+    float qy = lastPosture_.quaternionY;
+    float qz = lastPosture_.quaternionZ;
+    
+    // クォータニオンの正規化
+    float norm = fast_sqrt(qw*qw + qx*qx + qy*qy + qz*qz);
+    if (norm > 0.0001f) {
+        qw /= norm; qx /= norm; qy /= norm; qz /= norm;
+    }
+    
+    // ベクトル回転: v' = q * v * q^(-1)
+    // 展開形での高速計算
+    float qw2 = qw * qw;
+    float qx2 = qx * qx;
+    float qy2 = qy * qy;
+    float qz2 = qz * qz;
+    
+    out_x = (qw2 + qx2 - qy2 - qz2) * x + 2.0f * (qx*qy - qw*qz) * y + 2.0f * (qx*qz + qw*qy) * z;
+    out_y = 2.0f * (qx*qy + qw*qz) * x + (qw2 - qx2 + qy2 - qz2) * y + 2.0f * (qy*qz - qw*qx) * z;
+    out_z = 2.0f * (qx*qz - qw*qy) * x + 2.0f * (qy*qz + qw*qx) * y + (qw2 - qx2 - qy2 + qz2) * z;
+}
+
+CRGB LEDSphereManager::extractColorFromImageUV(float u, float v) const {
+    // CUBE-neon実績実装: UV座標から画像色抽出
+    // TODO: 画像データの実装が必要（half-grad-160-80.hスタイル）
+    
+    // 暫定実装: プロシージャル色生成
+    // u: 緯度系（-π/2 〜 π/2） → 0〜1に正規化
+    // v: 経度系（-π 〜 π） → 0〜1に正規化
+    float norm_u = (u + M_PI/2.0f) / M_PI;
+    float norm_v = (v + M_PI) / (2.0f * M_PI);
+    
+    // クランプ
+    norm_u = clampValue(norm_u, 0.0f, 1.0f);
+    norm_v = clampValue(norm_v, 0.0f, 1.0f);
+    
+    // HSV色空間でのプロシージャル生成（CUBE-neon方式）
+    uint8_t hue = (uint8_t)(norm_v * 255);        // 経度で色相
+    uint8_t sat = 255;                           // 彩度は最大
+    uint8_t val = (uint8_t)(norm_u * 255);       // 緯度で明度
+    
+    CRGB color;
+    color.setHSV(hue, sat, val);
+    return color;
 }
 
 // ========== シングルトンアクセス ==========
