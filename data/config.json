@@ -117,7 +117,7 @@
     },
     "led": {
       "enabled": true,
-      "brightness": 128,
+      "brightness": 32,
       "strip_gpios": [5, 6, 7, 8],
       "num_strips": 4,
       "leds_per_strip": [180, 220, 180, 220],

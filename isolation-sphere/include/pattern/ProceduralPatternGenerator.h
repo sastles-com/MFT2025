@@ -1,11 +1,17 @@
 #pragma once
+#include <cstdint>
+#include <functional>
+#include <map>
+#include <memory>
+#include <vector>
+
+#if !defined(UNIT_TEST)
 #include <Arduino.h>
 #include <M5Unified.h>
 #include <FastLED.h>
-#include <vector>
-#include <memory>
-#include <map>
-#include <functional>
+#else
+struct CRGB;
+#endif
 
 // LEDSphereManager統合
 namespace LEDSphere {
@@ -149,6 +155,38 @@ public:
     
 private:
     void drawLongitudeLine(float longitude, const CRGB& color, const PatternParams& params);
+};
+
+/**
+ * @brief オープニング用リング降下パターン
+ */
+class FallingRingOpeningPattern : public IPattern {
+private:
+    struct RingTimeline {
+        uint16_t color;
+        float startProgress;
+        float duration;
+        float brightnessScale;
+    };
+
+    std::vector<RingTimeline> rings_;
+    float baseBrightness_;
+    uint8_t ringWidth_;
+
+public:
+    FallingRingOpeningPattern();
+    ~FallingRingOpeningPattern() = default;
+
+    void render(const PatternParams& params) override;
+    const char* getName() const override { return "Falling Ring Opening"; }
+    const char* getDescription() const override { return "Three colored rings descend from north to south"; }
+    float getDuration() const override { return 3.5f; }
+
+    void setBrightness(float brightness) override { baseBrightness_ = brightness; }
+    void setRingWidth(uint8_t width) { ringWidth_ = width; }
+
+private:
+    static CRGB colorFromRGB565(uint16_t color, float brightnessScale);
 };
 
 /**

@@ -4,9 +4,46 @@
  */
 
 #include "led/LEDSphereManager.h"
+#include <algorithm>
+#include <cstdlib>
+#include <cstring>
+#include <cstdio>
+#include <cmath>
+
+#if defined(ARDUINO)
+#include <FS.h>
+#include <LittleFS.h>
+#endif
+
+#ifndef ARDUINO
+struct DummySerial {
+    template<typename... Args> void printf(const char*, Args...) {}
+    void println(const char*) {}
+    void print(const char*) {}
+};
+static DummySerial Serial;
+#else
 #include <Arduino.h>
+#endif
 
 namespace LEDSphere {
+
+namespace {
+template <typename T>
+T clampValue(T value, T minValue, T maxValue) {
+    if (value < minValue) return minValue;
+    if (value > maxValue) return maxValue;
+    return value;
+}
+}
+
+static float degToRad(float deg) {
+    return deg * static_cast<float>(M_PI) / 180.0f;
+}
+
+static float radToDeg(float rad) {
+    return rad * 180.0f / static_cast<float>(M_PI);
+}
 
 // ========== LEDSphereManager実装 ==========
 
@@ -28,6 +65,15 @@ LEDSphereManager::LEDSphereManager()
 
 LEDSphereManager::~LEDSphereManager() {
     Serial.println("[LEDSphereManager] Destructor called");
+    if (frameBuffer_) {
+        free(frameBuffer_);
+        frameBuffer_ = nullptr;
+        totalLeds_ = 0;
+    }
+    layoutPositions_.clear();
+    latitudeCacheDeg_.clear();
+    longitudeCacheDeg_.clear();
+    layoutLoaded_ = false;
 }
 
 // ========== 初期化・設定 ==========
@@ -39,14 +85,15 @@ bool LEDSphereManager::initialize(const char* csvPath) {
     }
 
     Serial.printf("[LEDSphereManager] Initializing with CSV: %s\n", csvPath);
-    
-    // TODO: 実際の初期化処理
-    // - LEDLayoutManager初期化
-    // - SphereCoordinateTransform初期化
-    // - FastLEDController初期化
-    // - UVCoordinateCache初期化
-    // - PerformanceMonitor初期化
-    
+
+    layoutLoaded_ = loadLayoutFromCSV(csvPath);
+    if (!layoutLoaded_) {
+        Serial.println("[LEDSphereManager] ⚠️ Failed to load LED layout - latitude/longitude patterns may be approximate");
+    } else {
+        buildLayoutCaches();
+        Serial.printf("[LEDSphereManager] Loaded %u LED layout entries\n", (unsigned)layoutPositions_.size());
+    }
+
     initialized_ = true;
     Serial.println("[LEDSphereManager] Initialization completed");
     return true;
@@ -82,6 +129,7 @@ bool LEDSphereManager::initializeLedHardware(uint8_t numStrips, const std::vecto
         uint8_t pin = stripGpios[s];
         uint16_t count = ledsPerStrip[s];
         Serial.printf("[LEDSphereManager] Registering strip %d: pin=%d count=%d offset=%u\n", (int)s, (int)pin, (int)count, (unsigned)offset);
+#if defined(USE_FASTLED)
         // Use compile-time template instantiation for common pins (0..16). If pin is out of range, fall back to warning.
         switch (pin) {
             case 0: FastLED.addLeds<WS2812, 0, GRB>(&frameBuffer_[offset], count); break;
@@ -105,11 +153,106 @@ bool LEDSphereManager::initializeLedHardware(uint8_t numStrips, const std::vecto
                 Serial.printf("[LEDSphereManager] Unsupported GPIO pin for templated addLeds: %d. Skipping this strip.\n", (int)pin);
                 break;
         }
+#else
+        (void)pin;
+        (void)count;
+#endif
         offset += count;
     }
 
     Serial.printf("[LEDSphereManager] LED hardware initialized, total LEDs=%u\n", (unsigned)totalLeds_);
+#if defined(USE_FASTLED)
+    clearAllLEDs();
+    FastLED.show();
+#endif
     return true;
+}
+
+bool LEDSphereManager::loadLayoutFromCSV(const char* csvPath) {
+#if defined(ARDUINO)
+    File file = LittleFS.open(csvPath, "r");
+    if (!file) {
+        String altPath = String("/littlefs") + String(csvPath);
+        file = LittleFS.open(altPath, "r");
+    }
+    if (!file) {
+        Serial.printf("[LEDSphereManager] Failed to open layout CSV: %s\n", csvPath);
+        return false;
+    }
+
+    layoutPositions_.clear();
+    latitudeCacheDeg_.clear();
+    longitudeCacheDeg_.clear();
+
+    // Skip header line
+    String header = file.readStringUntil('\n');
+    (void)header;
+
+    while (file.available()) {
+        String line = file.readStringUntil('\n');
+        line.trim();
+        if (line.isEmpty()) {
+            continue;
+        }
+
+        int comma1 = line.indexOf(',');
+        int comma2 = line.indexOf(',', comma1 + 1);
+        int comma3 = line.indexOf(',', comma2 + 1);
+        int comma4 = line.indexOf(',', comma3 + 1);
+        int comma5 = line.indexOf(',', comma4 + 1);
+
+        if (comma1 < 0 || comma2 < 0 || comma3 < 0 || comma4 < 0 || comma5 < 0) {
+            continue;
+        }
+
+        uint16_t faceID = static_cast<uint16_t>(line.substring(0, comma1).toInt());
+        uint8_t strip = static_cast<uint8_t>(line.substring(comma1 + 1, comma2).toInt());
+        uint8_t stripNum = static_cast<uint8_t>(line.substring(comma2 + 1, comma3).toInt());
+        float x = line.substring(comma3 + 1, comma4).toFloat();
+        float y = line.substring(comma4 + 1, comma5).toFloat();
+        float z = line.substring(comma5 + 1).toFloat();
+
+        layoutPositions_.emplace_back(faceID, strip, stripNum, x, y, z);
+    }
+
+    file.close();
+
+    bool ok = !layoutPositions_.empty();
+    if (!ok) {
+        layoutPositions_.clear();
+    }
+    return ok;
+#else
+    (void)csvPath;
+    return false;
+#endif
+}
+
+void LEDSphereManager::buildLayoutCaches() {
+    latitudeCacheDeg_.resize(layoutPositions_.size());
+    longitudeCacheDeg_.resize(layoutPositions_.size());
+    for (size_t i = 0; i < layoutPositions_.size(); ++i) {
+        const auto& pos = layoutPositions_[i];
+        latitudeCacheDeg_[i] = computeLatitudeDeg(pos.x, pos.y, pos.z);
+        longitudeCacheDeg_[i] = computeLongitudeDeg(pos.x, pos.y, pos.z);
+    }
+}
+
+float LEDSphereManager::computeLatitudeDeg(float x, float y, float z) {
+    (void)x;
+    (void)z;
+    float clampedY = clampValue(y, -1.0f, 1.0f);
+    return radToDeg(asinf(clampedY));
+}
+
+float LEDSphereManager::computeLongitudeDeg(float x, float y, float z) {
+    (void)y;
+    return radToDeg(atan2f(z, x));
+}
+
+float LEDSphereManager::wrappedLongitudeDifference(float aDeg, float bDeg) {
+    float diff = fmodf(aDeg - bDeg + 540.0f, 360.0f) - 180.0f;
+    return fabsf(diff);
 }
 
 // ========== 姿勢・座標制御 ==========
@@ -136,39 +279,51 @@ void LEDSphereManager::setPostureParams(const PostureParams& params) {
 // ========== LED制御 ==========
 
 void LEDSphereManager::setLED(uint16_t faceID, CRGB color) {
-    if (faceID >= LED_COUNT) {
+    if (!frameBuffer_ || faceID >= totalLeds_) {
         Serial.printf("[LEDSphereManager] Invalid faceID: %d\n", faceID);
         return;
     }
-    
-    // TODO: 実際のLED設定処理
-    Serial.printf("[LEDSphereManager] LED %d set to RGB(%d,%d,%d)\n", 
-                  faceID, color.r, color.g, color.b);
+    frameBuffer_[faceID] = color;
 }
 
 void LEDSphereManager::setLEDByUV(float u, float v, CRGB color, float radius) {
     Serial.printf("[LEDSphereManager] UV LED set: (%.3f, %.3f) RGB(%d,%d,%d) r=%.3f\n", 
                   u, v, color.r, color.g, color.b, radius);
-    
-    // TODO: UV座標からLED IDを検索して設定
+    if (!frameBuffer_) return;
+    float clampedU = clampValue(u, 0.0f, 1.0f);
+    size_t index = static_cast<size_t>(clampedU * (totalLeds_ - 1));
+    frameBuffer_[index] = color;
 }
 
 void LEDSphereManager::clearAllLEDs() {
-    Serial.println("[LEDSphereManager] Clearing all LEDs");
-    
-    // TODO: 実際の全LED消去処理
+#ifdef UNIT_TEST
+    operationLog_.push_back("clear");
+#endif
+    if (!frameBuffer_) {
+        return;
+    }
+    for (size_t i = 0; i < totalLeds_; ++i) {
+        frameBuffer_[i] = CRGB(0, 0, 0);
+    }
 }
 
 void LEDSphereManager::setBrightness(uint8_t brightness) {
     Serial.printf("[LEDSphereManager] Brightness set to %d\n", brightness);
-    
-    // TODO: FastLED輝度設定
+#if defined(USE_FASTLED)
+    FastLED.setBrightness(brightness);
+#else
+    (void)brightness;
+#endif
 }
 
 void LEDSphereManager::show() {
-    Serial.println("[LEDSphereManager] Showing LEDs");
-    
-    // TODO: FastLED.show()実行
+#ifdef UNIT_TEST
+    showCalledForTest_ = true;
+    operationLog_.push_back("show");
+#endif
+#if defined(USE_FASTLED)
+    FastLED.show();
+#endif
 }
 
 // ========== 高速パターン描画 ==========
@@ -181,23 +336,147 @@ void LEDSphereManager::drawCoordinateAxis(bool showGrid, float brightness) {
 }
 
 void LEDSphereManager::drawLatitudeLine(float latitude, CRGB color, uint8_t lineWidth) {
-    Serial.printf("[LEDSphereManager] Drawing latitude line: %.1f° RGB(%d,%d,%d) width=%d\n", 
-                  latitude, color.r, color.g, color.b, lineWidth);
-    
-    // TODO: 緯度線描画
+    if (!frameBuffer_) return;
+
+    if (layoutLoaded_ && layoutPositions_.size() == latitudeCacheDeg_.size()) {
+        float tolerance = std::max(1.0f, static_cast<float>(lineWidth) * 2.0f);
+        for (size_t i = 0; i < layoutPositions_.size(); ++i) {
+            if (fabsf(latitudeCacheDeg_[i] - latitude) <= tolerance) {
+                uint16_t id = layoutPositions_[i].faceID;
+                if (id < totalLeds_) {
+                    frameBuffer_[id] = color;
+                }
+            }
+        }
+        return;
+    }
+
+    float normLat = clampValue((latitude + 90.0f) / 180.0f, 0.0f, 1.0f);
+    size_t center = static_cast<size_t>(normLat * (totalLeds_ - 1));
+    size_t bandWidth = std::max<size_t>(1, static_cast<size_t>(lineWidth)) * std::max<size_t>(1, totalLeds_ / 200 + 1);
+    size_t start = (center > bandWidth) ? center - bandWidth : 0;
+    size_t end = std::min(totalLeds_, center + bandWidth + 1);
+    for (size_t i = start; i < end; ++i) {
+        frameBuffer_[i] = color;
+    }
+#ifdef UNIT_TEST
+    char buffer[48];
+    std::snprintf(buffer, sizeof(buffer), "lat:%.1f", latitude);
+    operationLog_.emplace_back(buffer);
+#endif
 }
 
 void LEDSphereManager::drawLongitudeLine(float longitude, CRGB color, uint8_t lineWidth) {
-    Serial.printf("[LEDSphereManager] Drawing longitude line: %.1f° RGB(%d,%d,%d) width=%d\n", 
-                  longitude, color.r, color.g, color.b, lineWidth);
-    
-    // TODO: 経度線描画
+    if (!frameBuffer_) return;
+
+    if (layoutLoaded_ && layoutPositions_.size() == longitudeCacheDeg_.size()) {
+        float tolerance = std::max(2.0f, static_cast<float>(lineWidth) * 4.0f);
+        for (size_t i = 0; i < layoutPositions_.size(); ++i) {
+            float diff = wrappedLongitudeDifference(longitudeCacheDeg_[i], longitude);
+            if (diff <= tolerance) {
+                uint16_t id = layoutPositions_[i].faceID;
+                if (id < totalLeds_) {
+                    frameBuffer_[id] = color;
+                }
+            }
+        }
+        return;
+    }
+
+    float normalized = longitude;
+    while (normalized < 0.0f) normalized += 360.0f;
+    while (normalized >= 360.0f) normalized -= 360.0f;
+    float norm = normalized / 360.0f;
+    size_t center = static_cast<size_t>(norm * (totalLeds_ - 1));
+    size_t bandWidth = std::max<size_t>(1, static_cast<size_t>(lineWidth)) * std::max<size_t>(1, totalLeds_ / 200 + 1);
+    size_t start = (center > bandWidth) ? center - bandWidth : 0;
+    size_t end = std::min(totalLeds_, center + bandWidth + 1);
+    for (size_t i = start; i < end; ++i) {
+        frameBuffer_[i] = color;
+    }
+#ifdef UNIT_TEST
+    char buffer[48];
+    std::snprintf(buffer, sizeof(buffer), "lon:%.1f", longitude);
+    operationLog_.emplace_back(buffer);
+#endif
 }
 
 void LEDSphereManager::drawSparsePattern(const std::map<uint16_t, CRGB>& points) {
     Serial.printf("[LEDSphereManager] Drawing sparse pattern: %zu points\n", points.size());
-    
-    // TODO: スパースパターン描画
+    if (!frameBuffer_) return;
+    for (const auto& entry : points) {
+        if (entry.first < totalLeds_) {
+            frameBuffer_[entry.first] = entry.second;
+        }
+    }
+}
+
+void LEDSphereManager::setAxisMarkerParams(float thresholdDegrees, uint8_t maxCount) {
+    axisMarkerThresholdDeg_ = thresholdDegrees;
+    axisMarkerMaxCount_ = std::max<uint8_t>(1, maxCount);
+}
+
+void LEDSphereManager::drawAxisMarkers(float thresholdDegrees, uint8_t maxPerAxis) {
+    setAxisMarkerParams(thresholdDegrees, maxPerAxis);
+    drawAxisMarkers();
+}
+
+void LEDSphereManager::drawAxisMarkers() {
+    if (!frameBuffer_ || !layoutLoaded_) {
+        return;
+    }
+
+    const uint8_t maxPerAxis = std::max<uint8_t>(1, axisMarkerMaxCount_);
+    const float cosThreshold = cosf(degToRad(axisMarkerThresholdDeg_));
+
+    struct AxisMarker {
+        float score;
+        uint16_t faceID;
+    };
+
+    auto selectAxis = [&](float ax, float ay, float az, const CRGB& color) {
+        std::vector<AxisMarker> markers;
+        markers.reserve(layoutPositions_.size());
+
+        for (const auto& pos : layoutPositions_) {
+            float len = sqrtf(pos.x * pos.x + pos.y * pos.y + pos.z * pos.z);
+            if (len <= 0.0001f) {
+                continue;
+            }
+            float dot = (pos.x * ax + pos.y * ay + pos.z * az) / len;  // -1.0 ~ 1.0 の範囲
+            markers.push_back({dot, pos.faceID});
+        }
+
+        std::sort(markers.begin(), markers.end(), [](const AxisMarker& a, const AxisMarker& b) {
+            return a.score > b.score;
+        });
+
+        std::vector<AxisMarker> selected;
+        selected.reserve(maxPerAxis);
+        for (const auto& marker : markers) {
+            if (marker.score < cosThreshold && !selected.empty()) {
+                continue;
+            }
+            selected.push_back(marker);
+            if (selected.size() >= maxPerAxis) {
+                break;
+            }
+        }
+
+        if (selected.empty() && !markers.empty()) {
+            selected.push_back(markers.front());
+        }
+
+        for (const auto& marker : selected) {
+            if (marker.faceID < totalLeds_) {
+                frameBuffer_[marker.faceID] = color;
+            }
+        }
+    };
+
+    selectAxis(1.0f, 0.0f, 0.0f, CRGB(255, 0, 0));   // +X 赤
+    selectAxis(0.0f, 1.0f, 0.0f, CRGB(0, 255, 0));   // +Y 緑
+    selectAxis(0.0f, 0.0f, 1.0f, CRGB(0, 0, 255));   // +Z 青
 }
 
 // ========== 検索・クエリ機能 ==========

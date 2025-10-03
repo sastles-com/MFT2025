@@ -1,21 +1,44 @@
 #include "boot/ProceduralOpeningSequence.h"
+#include <algorithm>
+#include <cmath>
+
+#if defined(UNIT_TEST)
+static inline unsigned long millis() { return 0; }
+static inline void esp_task_wdt_reset() {}
+#else
 #include <Arduino.h>
 #include <M5Unified.h>
 #include <esp_task_wdt.h>
-#include <cmath>
+#endif
 
 ProceduralOpeningSequence::ProceduralOpeningSequence(LEDSphere::LEDSphereManager& sphereManager)
     : sphereManager_(sphereManager) {
+#if defined(UNIT_TEST)
+    progressMutex_ = nullptr;
+#else
     progressMutex_ = xSemaphoreCreateMutex();
+#endif
+
+    openingRingPattern_.setSphereManager(&sphereManager_);
 }
 
 ProceduralOpeningSequence::~ProceduralOpeningSequence() {
     stopSequence();
+#if !defined(UNIT_TEST)
     if (progressMutex_) {
         vSemaphoreDelete(progressMutex_);
     }
+#endif
 }
 
+#if defined(UNIT_TEST)
+bool ProceduralOpeningSequence::startSequence(const SequenceConfig& config,
+                                              const PhaseCallbacks& callbacks) {
+    (void)config;
+    (void)callbacks;
+    return false;
+}
+#else
 bool ProceduralOpeningSequence::startSequence(const SequenceConfig& config, 
                                              const PhaseCallbacks& callbacks) {
     if (taskHandle_) {
@@ -54,15 +77,24 @@ bool ProceduralOpeningSequence::startSequence(const SequenceConfig& config,
     
     return true;
 }
+#endif
 
 void ProceduralOpeningSequence::syncExternalProgress(float externalProgress) {
+#if defined(UNIT_TEST)
+    externalProgress_ = std::max(0.0f, std::min(1.0f, externalProgress));
+#else
     if (xSemaphoreTake(progressMutex_, pdMS_TO_TICKS(1)) == pdTRUE) {
         externalProgress_ = constrain(externalProgress, 0.0f, 1.0f);
         xSemaphoreGive(progressMutex_);
     }
+#endif
 }
 
 void ProceduralOpeningSequence::stopSequence() {
+#if defined(UNIT_TEST)
+    stopRequested_ = true;
+    taskHandle_ = nullptr;
+#else
     if (!taskHandle_) return;
 
     stopRequested_ = true;
@@ -80,14 +112,23 @@ void ProceduralOpeningSequence::stopSequence() {
 
     Serial.printf("[ProcOpening] 🎬 Sequence stopped - %u frames, %.1f fps\n",
                   stats_.totalFrames, stats_.averageFps);
+#endif
 }
 
 void ProceduralOpeningSequence::sequenceTaskEntry(void* param) {
+#if !defined(UNIT_TEST)
     auto* sequence = static_cast<ProceduralOpeningSequence*>(param);
     sequence->sequenceTaskLoop();
+#else
+    (void)param;
+#endif
 }
 
 void ProceduralOpeningSequence::sequenceTaskLoop() {
+#if defined(UNIT_TEST)
+    // Not executed in unit tests.
+    taskHandle_ = nullptr;
+#else
     uint32_t frameCount = 0;
     uint32_t totalFrameTime = 0;
     uint32_t maxFrameTime = 0;
@@ -158,17 +199,12 @@ void ProceduralOpeningSequence::sequenceTaskLoop() {
             case SequencePhase::PHASE_BOOT_SPLASH:
                 renderBootSplash(phaseProgress, animationTime);
                 break;
-            case SequencePhase::PHASE_SYSTEM_CHECK:
-                renderSystemCheck(phaseProgress, animationTime);
-                break;
-            case SequencePhase::PHASE_SPHERE_EMERGE:
-                renderSphereEmerge(phaseProgress, animationTime);
-                break;
-            case SequencePhase::PHASE_AXIS_CALIBRATE:
-                renderAxisCalibrate(phaseProgress, animationTime);
-                break;
             case SequencePhase::PHASE_READY_PULSE:
                 renderReadyPulse(phaseProgress, animationTime);
+                break;
+            default:
+                // 一時的にその他のフェーズ表示を停止
+                sphereManager_.clearAllLEDs();
                 break;
         }
 
@@ -222,36 +258,20 @@ void ProceduralOpeningSequence::sequenceTaskLoop() {
     
     taskHandle_ = nullptr;
     vTaskDelete(nullptr);
+#endif
 }
 
 void ProceduralOpeningSequence::renderBootSplash(float phaseProgress, uint32_t timeMs) {
-    // Phase 1: システムロゴ風スプラッシュ
-    sphereManager_.clearAllLEDs();
-    
-    // 中央から放射状に広がるリング
-    float ringRadius = phaseProgress * 90.0f; // 0-90度まで拡大
-    
-    // 複数リングで立体感
-    for (int ring = 0; ring < 3; ring++) {
-        float currentRadius = ringRadius - ring * 15.0f;
-        if (currentRadius > 0) {
-            float intensity = 1.0f - (ring * 0.2f);
-            CRGB ringColor = CRGB(
-                255 * intensity * config_.brightness,
-                200 * intensity * config_.brightness,
-                50 * intensity * config_.brightness
-            ); // ゴールド系
-            
-            sphereManager_.drawLatitudeLine(0.0f, ringColor, currentRadius / 30.0f);
-        }
-    }
-    
-    // 回転スポーク（4本）
-    for (int spoke = 0; spoke < 4; spoke++) {
-        float spokeAngle = spoke * 90.0f + (timeMs * 0.1f); // ゆっくり回転
-        CRGB spokeColor = CRGB(100 * config_.brightness, 150 * config_.brightness, 255 * config_.brightness);
-        sphereManager_.drawLongitudeLine(spokeAngle, spokeColor, 2.0f * phaseProgress);
-    }
+    ProceduralPattern::PatternParams params;
+    params.progress = std::max(0.0f, std::min(phaseProgress, 1.0f));
+    params.time = timeMs / 1000.0f;
+    params.brightness = config_.brightness;
+    params.enableFlicker = false;
+    params.speed = 1.0f;
+
+    openingRingPattern_.setBrightness(config_.brightness);
+    openingRingPattern_.setRingWidth(6);
+    openingRingPattern_.render(params);
 }
 
 void ProceduralOpeningSequence::renderSystemCheck(float phaseProgress, uint32_t timeMs) {
@@ -360,44 +380,13 @@ void ProceduralOpeningSequence::renderAxisCalibrate(float phaseProgress, uint32_
 }
 
 void ProceduralOpeningSequence::renderReadyPulse(float phaseProgress, uint32_t timeMs) {
-    // Phase 5: 準備完了パルス
+    (void)phaseProgress;
+    (void)timeMs;
     sphereManager_.clearAllLEDs();
-    
-    // 全体パルス（完了合図）
-    float pulseFreq = 2.0f + phaseProgress * 2.0f; // 加速パルス
-    float pulseIntensity = sinf(timeMs * 0.01f * pulseFreq) * 0.5f + 0.5f;
-    
-    // 成功カラー（グリーン主体）
-    CRGB readyColor = CRGB(
-        100 * pulseIntensity * config_.brightness,
-        255 * pulseIntensity * config_.brightness,
-        100 * pulseIntensity * config_.brightness
-    );
-    
-    // 複数緯度でパルス
-    for (int lat = -60; lat <= 60; lat += 20) {
-        sphereManager_.drawLatitudeLine(lat, readyColor, 3.0f);
-    }
-    
-    // 最終フェーズでは全面発光
-    if (phaseProgress > 0.9f) {
-        // 球体全体を明るく（成功完了）
-        CRGB finalColor = CRGB(
-            200 * config_.brightness,
-            255 * config_.brightness,
-            200 * config_.brightness
-        );
-        
-        // 全緯度・経度を明るく
-        for (int lat = -80; lat <= 80; lat += 20) {
-            sphereManager_.drawLatitudeLine(lat, finalColor, 2.0f);
-        }
-        for (int lon = 0; lon < 360; lon += 30) {
-            sphereManager_.drawLongitudeLine(lon, finalColor, 1.0f);
-        }
-    }
+    sphereManager_.drawAxisMarkers(10.0f, 5);
 }
 
+#if !defined(UNIT_TEST)
 void ProceduralOpeningSequence::updateLCDProgress(SequencePhase phase, float progress) {
     static SequencePhase lastPhase = SequencePhase::PHASE_BOOT_SPLASH;
     static uint32_t lastUpdate = 0;
@@ -438,6 +427,7 @@ void ProceduralOpeningSequence::updateLCDProgress(SequencePhase phase, float pro
     M5.Display.drawRect(5, barY, barWidth, barHeight, TFT_WHITE);
     M5.Display.fillRect(6, barY + 1, (progress * (barWidth - 2)), barHeight - 2, TFT_GREEN);
 }
+#endif
 
 ProceduralOpeningSequence::PerformanceStats ProceduralOpeningSequence::getPerformanceStats() const {
     return stats_;
@@ -509,3 +499,37 @@ bool SynchronizedBootSequence::executeBootWithOpening(HeavyTaskFunction heavyTas
 SynchronizedBootSequence::ExecutionResult SynchronizedBootSequence::getLastResult() const {
     return lastResult_;
 }
+#ifdef UNIT_TEST
+void ProceduralOpeningSequence::renderPhaseForTest(SequencePhase phase,
+                                                   float phaseProgress,
+                                                   float animationTimeMs,
+                                                   LEDSphere::LEDSphereManager& manager) {
+    ProceduralOpeningSequence sequence(manager);
+    sequence.config_.showLCDProgress = false;
+    sequence.config_.brightness = 1.0f;
+    sequence.sequenceStartMs_ = 0;
+    sequence.stopRequested_ = false;
+
+    uint32_t timeMs = static_cast<uint32_t>(animationTimeMs);
+
+    switch (phase) {
+        case SequencePhase::PHASE_BOOT_SPLASH:
+            sequence.renderBootSplash(phaseProgress, timeMs);
+            break;
+        case SequencePhase::PHASE_SYSTEM_CHECK:
+            sequence.renderSystemCheck(phaseProgress, timeMs);
+            break;
+        case SequencePhase::PHASE_SPHERE_EMERGE:
+            sequence.renderSphereEmerge(phaseProgress, timeMs);
+            break;
+        case SequencePhase::PHASE_AXIS_CALIBRATE:
+            sequence.renderAxisCalibrate(phaseProgress, timeMs);
+            break;
+        case SequencePhase::PHASE_READY_PULSE:
+            sequence.renderReadyPulse(phaseProgress, timeMs);
+            break;
+    }
+
+    manager.show();
+}
+#endif

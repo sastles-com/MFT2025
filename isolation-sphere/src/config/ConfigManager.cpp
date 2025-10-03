@@ -1,8 +1,10 @@
 #include "config/ConfigManager.h"
 
 #include <ArduinoJson.h>
+#ifndef UNIT_TEST
 #include <FS.h>
 #include <LittleFS.h>
+#endif
 #include <cstring>
 #include <utility>
 
@@ -82,17 +84,22 @@ bool ConfigManager::load(const char *path) {
     return false;
   }
 
+#ifdef ARDUINO
   Serial.printf("[Config] Loading config from %s, size: %zu bytes\n", path, raw.length());
+#endif
   
   DynamicJsonDocument doc(kJsonCapacity);
   auto error = deserializeJson(doc, raw);
   if (error) {
+#ifdef ARDUINO
     Serial.printf("[Config] JSON parse error: %s\n", error.c_str());
+#endif
     loaded_ = false;
     return false;
   }
-  
+#ifdef ARDUINO
   Serial.println("[Config] JSON parsed successfully");
+#endif
 
   const JsonVariantConst system = doc["system"];
   config_.system.name = safeString(system["name"]);
@@ -295,7 +302,14 @@ bool ConfigManager::load(const char *path) {
   }
 
   // LED hardware configuration: leds_per_strip and strip_gpios
-  const JsonVariantConst ledsCfg = doc["leds"];
+  JsonVariantConst ledsCfg = doc["leds"];
+  if (ledsCfg.isNull()) {
+    const JsonVariantConst sphere = doc["sphere"];
+    if (!sphere.isNull()) {
+      ledsCfg = sphere["led"];
+    }
+  }
+
   if (!ledsCfg.isNull()) {
     const JsonArrayConst perStrip = ledsCfg["leds_per_strip"].as<JsonArrayConst>();
     if (!perStrip.isNull()) {
@@ -327,9 +341,11 @@ bool ConfigManager::load(const char *path) {
   }
 
   loaded_ = true;
+#ifdef ARDUINO
   Serial.printf("[Config] Configuration loaded successfully. WiFi enabled: %s, MQTT enabled: %s\n", 
                config_.wifi.enabled ? "true" : "false",
                config_.mqtt.enabled ? "true" : "false");
+#endif
   return true;
 }
 
@@ -341,6 +357,7 @@ const ConfigManager::Config &ConfigManager::config() const {
   return config_;
 }
 
+#ifndef UNIT_TEST
 ConfigManager::FsProvider ConfigManager::makeLittleFsProvider() {
   FsProvider provider;
   provider.readFile = [](const char *path, std::string &out) {
@@ -364,3 +381,10 @@ ConfigManager::FsProvider ConfigManager::makeLittleFsProvider() {
   };
   return provider;
 }
+#else
+ConfigManager::FsProvider ConfigManager::makeLittleFsProvider() {
+  FsProvider provider;
+  provider.readFile = nullptr;
+  return provider;
+}
+#endif

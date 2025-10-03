@@ -1,8 +1,16 @@
 #pragma once
 
+#include <cstdint>
+#include <functional>
+
+#if defined(UNIT_TEST)
+using TaskHandle_t = void*;
+using SemaphoreHandle_t = void*;
+#else
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/semphr.h>
+#endif
 #include "led/LEDSphereManager.h"
 #include "pattern/ProceduralPatternGenerator.h"
 
@@ -84,6 +92,13 @@ public:
     };
     PerformanceStats getPerformanceStats() const;
 
+#ifdef UNIT_TEST
+    static void renderPhaseForTest(SequencePhase phase,
+                                   float totalProgress,
+                                   float animationTimeMs,
+                                   LEDSphere::LEDSphereManager& manager);
+#endif
+
 private:
     static void sequenceTaskEntry(void* param);
     void sequenceTaskLoop();
@@ -114,6 +129,8 @@ private:
     
     // パフォーマンス統計
     mutable PerformanceStats stats_;
+
+    ProceduralPattern::FallingRingOpeningPattern openingRingPattern_;
 };
 
 /**

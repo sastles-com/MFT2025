@@ -1,5 +1,6 @@
 #include "pattern/ProceduralPatternGenerator.h"
 #include "led/LEDSphereManager.h"
+#include <algorithm>
 #include <cmath>
 #include "pattern/TestStripPattern.h"
 
@@ -194,6 +195,53 @@ SphereCoordinateSystem::getGridCircle(float radius3D, int centerX, int centerY, 
 }
 
 // ---- LatitudeRingPattern 実装 ----
+
+FallingRingOpeningPattern::FallingRingOpeningPattern()
+    : baseBrightness_(1.0f), ringWidth_(4) {
+    rings_ = {
+        {TFT_RED,   0.00f, 0.60f, 1.0f},
+        {TFT_GREEN, 0.45f, 0.60f, 1.0f},
+        {TFT_BLUE,  0.85f, 0.65f, 1.0f}
+    };
+}
+
+CRGB FallingRingOpeningPattern::colorFromRGB565(uint16_t color, float brightnessScale) {
+    brightnessScale = std::max(0.0f, std::min(brightnessScale, 1.0f));
+
+    uint8_t r = ((color >> 11) & 0x1F) << 3;
+    uint8_t g = ((color >> 5) & 0x3F) << 2;
+    uint8_t b = (color & 0x1F) << 3;
+
+    CRGB result(r, g, b);
+    result.nscale8((uint8_t)(brightnessScale * 255.0f));
+    return result;
+}
+
+void FallingRingOpeningPattern::render(const PatternParams& params) {
+    if (!sphereManager_) {
+        return;
+    }
+
+    sphereManager_->clearAllLEDs();
+
+    const float brightnessScale = std::max(0.0f, std::min(baseBrightness_ * params.brightness, 1.0f));
+
+    for (const auto& ring : rings_) {
+        const float localTime = (params.progress - ring.startProgress) / ring.duration;
+        if (localTime < 0.0f || localTime > 1.0f) {
+            continue;
+        }
+
+        // 滑らかな落下感を出すために smoothstep を利用
+        float eased = localTime * localTime * (3.0f - 2.0f * localTime);
+        float latitude = 90.0f - eased * 180.0f;
+
+        CRGB color = colorFromRGB565(ring.color, brightnessScale * ring.brightnessScale);
+        sphereManager_->drawLatitudeLine(latitude, color, ringWidth_);
+    }
+
+    sphereManager_->show();
+}
 
 LatitudeRingPattern::LatitudeRingPattern() 
     : speed_(1.0f), brightness_(1.0f), enableFlicker_(true), fadeStartLatitude_(-25.0f) {
@@ -484,6 +532,8 @@ PatternGenerator::PatternGenerator() : currentPatternName_("") {
 std::unique_ptr<IPattern> PatternGenerator::createPattern(const std::string& patternName) {
     if (patternName == "latitude_rings") {
         return std::unique_ptr<LatitudeRingPattern>(new LatitudeRingPattern());
+    } else if (patternName == "ring_fall_opening") {
+        return std::unique_ptr<FallingRingOpeningPattern>(new FallingRingOpeningPattern());
     } else if (patternName == "longitude_lines") {
         return std::unique_ptr<LongitudeLinePattern>(new LongitudeLinePattern());
     } else if (patternName == "coordinate_axis") {
@@ -517,6 +567,7 @@ void PatternGenerator::renderPattern(const std::string& patternName, float progr
 std::vector<std::string> PatternGenerator::getAvailablePatterns() const {
     return {
         "latitude_rings",
+        "ring_fall_opening",
         "longitude_lines", 
         "coordinate_axis",
         "spiral_trajectory",

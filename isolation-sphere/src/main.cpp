@@ -4,10 +4,13 @@
 #include <WiFi.h>
 #include <Wire.h>
 #include <M5Unified.h>
-#include <esp_task_wdt.h>
 #include <TJpg_Decoder.h>
+#include <esp_task_wdt.h>
+#include <memory>
 
 #include "audio/BuzzerService.h"
+#include "boot/ProceduralOpeningPlayer.h"
+#include "boot/SynchronizedBootExecutor.h"
 #include "boot/BootOrchestrator.h"
 #include "config/ConfigManager.h"
 // #include "core/CoreTasks.h" // TODO: Implement proper CoreTasks
@@ -58,6 +61,13 @@ ImuService imuService;
 // Runtime: UI shake detector + bridge (created in setup())
 ShakeDetector* uiShakeDetector = nullptr;
 ShakeToUiBridge* shakeToUiBridge = nullptr;
+
+ConfigManager configManager;
+
+// LED基盤システム & パフォーマンステスト
+LEDSphere::LEDSphereManager sphereManager;
+PerformanceTest::ProceduralPatternPerformanceTester perfTester;
+bool performanceTestMode = false;
 
 // ダミーPSRAMテスト関数（必要に応じて本来の実装に差し替え）
 void testPSRAM() {
@@ -239,182 +249,78 @@ void playOpeningAnimation();
 void playOpeningAnimationFromLittleFS();
 void playOpeningAnimationFromFS(fs::FS &fileSystem, const char* fsName);
 void playTestAnimation();
-void showOpeningProgress(int currentFrame, int totalFrames);
 
-// TJpg_Decoder用のコールバック関数
+namespace {
+
+std::unique_ptr<SynchronizedBootSequence> gProceduralSequence;
+std::unique_ptr<Boot::SynchronizedBootExecutor> gProceduralExecutor;
+std::unique_ptr<Boot::ProceduralOpeningPlayer> gProceduralPlayer;
+
+void ensureProceduralOpeningReady() {
+  if (!gProceduralPlayer) {
+    gProceduralSequence.reset(new SynchronizedBootSequence(sphereManager));
+    gProceduralExecutor.reset(new Boot::SynchronizedBootExecutor(*gProceduralSequence));
+    gProceduralPlayer.reset(new Boot::ProceduralOpeningPlayer(*gProceduralExecutor));
+  }
+}
+
+bool runProceduralOpening(const Boot::ProceduralBootExecutor::HeavyTaskFunction &heavyTask) {
+  ensureProceduralOpeningReady();
+  if (!gProceduralPlayer) {
+    Serial.println("[Opening] ❌ Procedural opening player unavailable");
+    return false;
+  }
+
+  bool success = gProceduralPlayer->playStandardOpening(heavyTask);
+  auto result = gProceduralPlayer->lastExecution();
+  Serial.printf("[Opening] 🎬 result: task=%s opening=%s time=%ums fps=%.1f\n",
+                result.taskSuccess ? "OK" : "NG",
+                result.openingSuccess ? "OK" : "NG",
+                result.totalTimeMs,
+                result.openingFps);
+#if defined(USE_FASTLED)
+  sphereManager.clearAllLEDs();
+  sphereManager.drawAxisMarkers(10.0f, 5);
+  sphereManager.show();
+#endif
+  return success;
+}
+
+}  // namespace
+
+namespace {
 bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap) {
   if (y >= M5.Display.height()) return 0;
   M5.Display.pushImage(x, y, w, h, bitmap);
   return 1;
 }
 
-// 進捗表示オーバーレイ
-void showOpeningProgress(int currentFrame, int totalFrames) {
-  static uint32_t lastUpdate = 0;
-  
-  // 100ms間隔で更新（パフォーマンス配慮）
-  if (millis() - lastUpdate < 100) return;
-  lastUpdate = millis();
-  
-  float progress = (float)(currentFrame - 1) / (float)totalFrames;
-  int progressPercent = (int)(progress * 100);
-  
-  // 画面右下に進捗表示
-  int displayWidth = M5.Display.width();
-  int displayHeight = M5.Display.height();
-  
-  // 進捗テキスト表示
-  M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
-  M5.Display.setTextSize(1);
-  
-  // 背景を少し暗くしてテキストを見やすく
-  M5.Display.fillRect(displayWidth - 50, displayHeight - 25, 48, 23, TFT_BLACK);
-  
-  // パーセント表示
-  M5.Display.setCursor(displayWidth - 45, displayHeight - 20);
-  M5.Display.printf("%3d%%", progressPercent);
-  
-  // プログレスバー
-  int barWidth = 40;
-  int barHeight = 4;
-  int barX = displayWidth - 45;
-  int barY = displayHeight - 10;
-  
-  // バー背景
-  M5.Display.drawRect(barX, barY, barWidth, barHeight, TFT_DARKGREY);
-  
-  // バー進捗
-  int filledWidth = (int)(progress * (barWidth - 2));
-  if (filledWidth > 0) {
-    // 進捗に応じて色を変化
-    uint16_t barColor = TFT_GREEN;
-    if (progressPercent < 25) {
-      barColor = TFT_RED;
-    } else if (progressPercent < 50) {
-      barColor = TFT_ORANGE;
-    } else if (progressPercent < 75) {
-      barColor = TFT_YELLOW;
-    }
-    
-    M5.Display.fillRect(barX + 1, barY + 1, filledWidth, barHeight - 2, barColor);
-  }
-  
-  // フレーム番号表示（デバッグ用）
-  if (totalFrames > 0) {
-    M5.Display.setCursor(5, displayHeight - 20);
-    M5.Display.setTextColor(TFT_CYAN, TFT_BLACK);
-    M5.Display.printf("Frame %d/%d", currentFrame, totalFrames);
-  }
+bool playOpeningFramesFromFs(fs::FS &fs) {
+  (void)fs;
+  Serial.println("[Opening] JPEG opening disabled (procedural only)");
+  return false;
 }
+}  // namespace
 
-// Opening連番JPEG表示関数（PSRamFS版）
 void playOpeningAnimation() {
-  Serial.println("[Opening] Starting opening animation from PSRamFS...");
-  playOpeningAnimationFromFS(PSRamFS, "PSRamFS");
-}
-
-// Opening連番JPEG表示関数（LittleFS版）
-void playOpeningAnimationFromLittleFS() {
-  Serial.println("[Opening] Starting opening animation from LittleFS...");
-  playOpeningAnimationFromFS(LittleFS, "LittleFS");
-}
-
-// 共通のオープニングアニメーション関数
-void playOpeningAnimationFromFS(fs::FS &fileSystem, const char* fsName) {
-  Serial.printf("[Opening] Starting opening animation from %s...\n", fsName);
-  
-  // TJpg_Decoderの初期化
-  TJpgDec.setJpgScale(1);
-  TJpgDec.setSwapBytes(true);
-  TJpgDec.setCallback(tft_output);
-  
-  const int totalFrames = 50; // opening/001.jpg から 050.jpg まで
-  const int frameDelay = 100;  // 10fps = 100ms間隔
-  
-  for (int frame = 1; frame <= totalFrames; frame++) {
-    unsigned long frameStart = millis();
-    
-    // 進捗率計算
-    float progress = (float)(frame - 1) / (float)totalFrames;
-    int progressPercent = (int)(progress * 100);
-    
-    // ファイル名を生成 (例: /images/opening/001.jpg)
-    char filename[64];
-    snprintf(filename, sizeof(filename), "/images/opening/%03d.jpg", frame);
-    
-    Serial.printf("[Opening] Loading frame %d from %s: %s (Progress: %d%%)\n", frame, fsName, filename, progressPercent);
-    
-    // 指定されたファイルシステムから画像ファイルを読み込み
-    File jpegFile = fileSystem.open(filename, "r");
-    if (jpegFile) {
-      size_t fileSize = jpegFile.size();
-      // Serial.println("[Opening] File size: " + String(fileSize) + " bytes");
-      
-      // ファイル全体をメモリに読み込み
-      uint8_t* jpegData = (uint8_t*)malloc(fileSize);
-      if (jpegData) {
-        size_t bytesRead = jpegFile.read(jpegData, fileSize);
-        jpegFile.close();
-        
-        if (bytesRead == fileSize) {
-          // ファイルがJPEGかを判定
-          if (fileSize >= 2 && jpegData[0] == 0xFF && jpegData[1] == 0xD8) {
-            // JPEG形式の場合
-            uint16_t w = 0, h = 0;
-            TJpgDec.getJpgSize(&w, &h, jpegData, fileSize);
-            // Serial.println("[Opening] JPEG Image size: " + String(w) + "x" + String(h));
-            
-            // 画面中央に配置
-            int16_t x = (M5.Display.width() - w) / 2;
-            int16_t y = (M5.Display.height() - h) / 2;
-            
-            // 背景をクリア
-            M5.Display.fillScreen(TFT_BLACK);
-            
-            // JPEG画像を表示
-            TJpgDec.drawJpg(x, y, jpegData, fileSize);
-            
-            // 進捗表示をオーバーレイ
-            showOpeningProgress(frame, totalFrames);
-            
-            // Serial.println("[Opening] JPEG Frame " + String(frame) + " displayed");
-          } else {
-            Serial.println("[Opening] Invalid JPEG format detected");
-          }
-        } else {
-          Serial.println("[Opening] Failed to read file completely");
-        }
-        
-        free(jpegData);
-      } else {
-        Serial.println("[Opening] Failed to allocate memory for JPEG data");
-        jpegFile.close();
-      }
-    } else {
-      Serial.println("[Opening] Failed to open file: " + String(filename));
-      
-      // ファイルが見つからなくても進捗表示は継続
-      showOpeningProgress(frame, totalFrames);
-    }
-    
-    // フレームレート調整（10fps）
-    unsigned long frameTime = millis() - frameStart;
-    if (frameTime < frameDelay) {
-      delay(frameDelay - frameTime);
-    }
-    
-    // WDTリセット
-    esp_task_wdt_reset();
-    
-    // ボタンが押されたら中断
-    M5.update();
-    if (M5.BtnA.wasPressed()) {
-      Serial.println("[Opening] Animation interrupted by button press");
-      break;
-    }
+  if (!playOpeningFramesFromFs(PSRamFS)) {
+    Serial.println("[Opening] 🎬 Falling back to procedural opening");
+    runProceduralOpening({});
   }
-  
-    Serial.printf("[Opening] Opening animation from %s completed\n", fsName);
+}
+
+void playOpeningAnimationFromLittleFS() {
+  if (!playOpeningFramesFromFs(LittleFS)) {
+    Serial.println("[Opening] 🎬 Falling back to procedural opening (LittleFS trigger)");
+    runProceduralOpening({});
+  }
+}
+
+void playOpeningAnimationFromFS(fs::FS &fileSystem, const char* fsName) {
+  Serial.printf("[Opening] 🎬 Starting opening sequence (%s trigger)...\n", fsName);
+  if (!playOpeningFramesFromFs(fileSystem)) {
+    runProceduralOpening({});
+  }
 }
 
 // プロシージャル（関数的）オープニングアニメーション
@@ -596,13 +502,6 @@ void playTestAnimation() {
   M5.Display.fillScreen(TFT_BLACK);
   Serial.println("[Opening] Test animation completed");
 }
-ConfigManager configManager;
-
-// LED基盤システム & パフォーマンステスト
-LEDSphere::LEDSphereManager sphereManager;
-PerformanceTest::ProceduralPatternPerformanceTester perfTester;
-bool performanceTestMode = false;
-
 // TODO: Implement proper CoreTasks
 // SphereCore0Task core0Task(makeTaskConfig("SphereCore0Task", 0, 4, 4096, 50), configManager, storageManager, sharedState);
 // SphereCore1Task core1Task(makeTaskConfig("SphereCore1Task", 1, 4, 4096, 20), sharedState);
@@ -827,10 +726,14 @@ void setup() {
     } else {
       Serial.println("[Main] LED config missing or incomplete, falling back to single-pin init");
       FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, NUM_LEDS);
+      FastLED.clear(true);
+      FastLED.show();
     }
   } else {
     Serial.println("[Main] Config not loaded, using default FastLED init");
     FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, NUM_LEDS);
+    FastLED.clear(true);
+    FastLED.show();
   }
   FastLED.setBrightness(50);
 #else
@@ -917,73 +820,9 @@ void setup() {
   //   Serial.println("[Image Test] PSRamFS not mounted - skipping test");
   // }
   
-  // Opening連番JPEG表示テスト
-  if (storageManager.isPsRamFsMounted()) {
-    Serial.println("[Opening] Checking for opening animation files...");
-    
-    // 最初のフレームが存在するかチェック
-    if (PSRamFS.exists("/images/opening/001.jpg")) {
-      Serial.println("[Opening] Opening animation files found");
-      delay(10); // 少し待ってからアニメーション開始
-      playOpeningAnimation();
-    } else {
-      Serial.println("[Opening] Opening animation files not found in PSRamFS");
-      Serial.println("[Opening] Creating temporary test JPEG files for demonstration...");
-      
-      // テスト用：PSRamFSにopeningディレクトリを作成
-      if (!PSRamFS.exists("/images/opening")) {
-        if (PSRamFS.mkdir("/images/opening")) {
-          Serial.println("[Opening] Created /images/opening directory");
-        }
-      }
-      
-      // // 実際のミニJPEGデータを作成（最小限のJPEGヘッダー + データ）
-      // Serial.println("[Opening] Generating actual JPEG test data...");
-      
-      // // 最小限の有効なJPEGデータを作成（8x8グレースケール）
-      // uint8_t miniJpegTemplate[] = {
-      //   0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01,
-      //   0x01, 0x01, 0x00, 0x48, 0x00, 0x48, 0x00, 0x00, 0xFF, 0xDB, 0x00, 0x43,
-      //   0x00, 0x08, 0x06, 0x06, 0x07, 0x06, 0x05, 0x08, 0x07, 0x07, 0x07, 0x09,
-      //   0x09, 0x08, 0x0A, 0x0C, 0x14, 0x0D, 0x0C, 0x0B, 0x0B, 0x0C, 0x19, 0x12,
-      //   0x13, 0x0F, 0x14, 0x1D, 0x1A, 0x1F, 0x1E, 0x1D, 0x1A, 0x1C, 0x1C, 0x20,
-      //   0x24, 0x2E, 0x27, 0x20, 0x22, 0x2C, 0x23, 0x1C, 0x1C, 0x28, 0x37, 0x29,
-      //   0x2C, 0x30, 0x31, 0x34, 0x34, 0x34, 0x1F, 0x27, 0x39, 0x3D, 0x38, 0x32,
-      //   0x3C, 0x2E, 0x33, 0x34, 0x32, 0xFF, 0xC0, 0x00, 0x11, 0x08, 0x00, 0x20,
-      //   0x00, 0x20, 0x01, 0x01, 0x11, 0x00, 0x02, 0x11, 0x01, 0x03, 0x11, 0x01,
-      //   0xFF, 0xC4, 0x00, 0x14, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-      //   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0xFF, 0xC4,
-      //   0x00, 0x14, 0x10, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-      //   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xDA, 0x00, 0x0C,
-      //   0x03, 0x01, 0x00, 0x02, 0x11, 0x03, 0x11, 0x00, 0x3F, 0x00, 0xAA, 0xFF, 0xD9
-      // };
-      
-      // for (int i = 1; i <= 3; i++) {
-      //   char filename[64];
-      //   snprintf(filename, sizeof(filename), "/images/opening/%03d.jpg", i);
-        
-      //   File jpegFile = PSRamFS.open(filename, "w");
-      //   if (jpegFile) {
-      //     // 基本のJPEGデータをコピー
-      //     uint8_t* jpegData = (uint8_t*)malloc(sizeof(miniJpegTemplate));
-      //     memcpy(jpegData, miniJpegTemplate, sizeof(miniJpegTemplate));
-          
-      //     // データを少し変更してフレームごとに違いを作る
-      //     jpegData[143] = 0xAA + (i * 0x11); // 最後のデータバイトを変更
-          
-      //     jpegFile.write(jpegData, sizeof(miniJpegTemplate));
-      //     jpegFile.close();
-      //     free(jpegData);
-          
-      //     Serial.println("[Opening] Created mini JPEG file: " + String(filename) + " (" + String(sizeof(miniJpegTemplate)) + " bytes)");
-      //   }
-      // }
-      
-      // Serial.println("[Opening] Test files created, starting demonstration...");
-      // delay(1000);
-      playOpeningAnimation();
-    }
-  }
+  // Proceduralオープニングを実行
+  Serial.println("[Opening] Starting procedural opening animation...");
+  playOpeningAnimation();
 
   Serial.println("Device Info:");
   Serial.println("- Heap free: " + String(ESP.getFreeHeap()));

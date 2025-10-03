@@ -8,11 +8,31 @@
 
 #pragma once
 
-#include <Arduino.h>
-#include <FastLED.h>
+#include <cstdint>
 #include <vector>
 #include <memory>
 #include <map>
+#include <string>
+
+#if defined(UNIT_TEST) && !defined(USE_FASTLED)
+struct CRGB {
+    uint8_t r;
+    uint8_t g;
+    uint8_t b;
+
+    CRGB() : r(0), g(0), b(0) {}
+    CRGB(uint8_t red, uint8_t green, uint8_t blue) : r(red), g(green), b(blue) {}
+
+    void fadeToBlackBy(uint8_t amount) {
+        if (r > amount) r -= amount; else r = 0;
+        if (g > amount) g -= amount; else g = 0;
+        if (b > amount) b -= amount; else b = 0;
+    }
+};
+#else
+#include <Arduino.h>
+#include <FastLED.h>
+#endif
 
 namespace LEDSphere {
 
@@ -90,12 +110,25 @@ private:
     CRGB* frameBuffer_ = nullptr;
     size_t totalLeds_ = 0;
     // コンポーネント管理（パフォーマンステスト用スタブとして削除）
+#ifdef UNIT_TEST
+    mutable bool showCalledForTest_ = false;
+    std::vector<std::string> operationLog_;
+#endif
     
     // システム状態
     bool initialized_;
     bool sparseMode_;           // スパース描画モード（30fps用）
     uint8_t targetFPS_;         // 目標FPS
     PostureParams lastPosture_; // 前回姿勢（変化検出用）
+
+    // レイアウトデータ
+    std::vector<LEDPosition> layoutPositions_;
+    std::vector<float> latitudeCacheDeg_;
+    std::vector<float> longitudeCacheDeg_;
+    bool layoutLoaded_ = false;
+
+    float axisMarkerThresholdDeg_ = 10.0f;
+    uint8_t axisMarkerMaxCount_ = 5;
 
 public:
     LEDSphereManager();
@@ -172,7 +205,7 @@ public:
      * @brief 全LED消去
      */
     void clearAllLEDs();
-    
+
     /**
      * @brief 全体輝度設定
      * @param brightness 輝度 [0-255]
@@ -208,6 +241,26 @@ public:
      * @param lineWidth 線幅（LED個数）
      */
     void drawLongitudeLine(float longitude, CRGB color, uint8_t lineWidth = 1);
+
+    /**
+     * @brief 軸方向マーカー描画
+     * @param thresholdDegrees 軸方向との許容角度（度）
+     * @param maxPerAxis 軸ごとに点灯する最大LED数
+     */
+    void drawAxisMarkers(float thresholdDegrees, uint8_t maxPerAxis);
+
+    /**
+     * @brief 保存済み設定を用いた軸方向マーカー描画
+     */
+    void drawAxisMarkers();
+
+    /**
+     * @brief 軸方向マーカーのパラメータ設定
+     */
+    void setAxisMarkerParams(float thresholdDegrees, uint8_t maxCount);
+
+    float axisMarkerThresholdDegrees() const { return axisMarkerThresholdDeg_; }
+    uint8_t axisMarkerMaxCount() const { return axisMarkerMaxCount_; }
     
     /**
      * @brief スパースパターン描画（高速）
@@ -294,7 +347,23 @@ public:
      */
     void printLEDLayout(size_t maxCount = 10) const;
 
+#ifdef UNIT_TEST
+public:
+    CRGB* frameBufferForTest() const { return frameBuffer_; }
+    size_t totalLedsForTest() const { return totalLeds_; }
+    void resetShowFlagForTest() { showCalledForTest_ = false; }
+    bool wasShowCalledForTest() const { return showCalledForTest_; }
+    void resetOperationLogForTest() { operationLog_.clear(); }
+    const std::vector<std::string>& operationsForTest() const { return operationLog_; }
+#endif
+
 private:
+    bool loadLayoutFromCSV(const char* csvPath);
+    void buildLayoutCaches();
+    static float computeLatitudeDeg(float x, float y, float z);
+    static float computeLongitudeDeg(float x, float y, float z);
+    static float wrappedLongitudeDifference(float aDeg, float bDeg);
+
     // 内部初期化メソッド
     bool initializeFastLED();
     bool initializeComponents();

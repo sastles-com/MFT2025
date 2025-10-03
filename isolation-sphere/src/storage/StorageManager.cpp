@@ -46,22 +46,10 @@ bool StorageManager::begin(bool formatOnLittleFail, bool formatOnPsFail) {
     return false;
   }
 
-  if (!hooks_.psramfsBegin) {
-    Serial.println("[Storage] PSRamFS begin hook not provided");
-    return false;
-  }
-
-  psMounted_ = hooks_.psramfsBegin(false);
-  if (!psMounted_ && formatOnPsFail) {
-    Serial.println("[Storage] PSRamFS mount failed, attempting format...");
-    psMounted_ = hooks_.psramfsBegin(true);
-  }
-
-  if (!psMounted_) {
-    Serial.println("[Storage] PSRamFS mount failed");
-  }
-
-  return psMounted_;
+  // PSRamFS は既知の問題により現時点では無効化
+  psMounted_ = false;
+  Serial.println("[Storage] PSRamFS disabled (skipping mount)");
+  return true;
 }
 
 bool StorageManager::isLittleFsMounted() const {
