@@ -190,6 +190,58 @@ private:
 };
 
 /**
+ * @brief Y軸周りリングパターン（緯度線リング群）🌍
+ * 
+ * 複数の緯度でリング状のLEDパターンを描画し、
+ * 各リングが独立したアニメーション（脈動・色変化）を実行
+ */
+class YAxisRingPattern : public IPattern {
+private:
+    struct Ring {
+        float latitude;     // 緯度（-90度〜+90度）
+        CRGB baseColor;    // 基準色
+        float speed;       // 個別アニメーション速度
+        float phase;       // 位相オフセット
+    };
+    
+    std::vector<Ring> rings_;
+    float globalSpeed_;
+    float brightness_;
+    bool enablePulsing_;
+    bool enableColorRotation_;
+    uint8_t ringWidth_;
+    
+public:
+    YAxisRingPattern();
+    ~YAxisRingPattern() = default;
+    
+    void render(const PatternParams& params) override;
+    const char* getName() const override { return "X-Axis Half Green Rings"; }
+    const char* getDescription() const override { return "Half green rings around Y-axis representing X-axis system"; }
+    float getDuration() const override { return 8.0f; }
+    
+    void setSpeed(float speed) override { globalSpeed_ = speed; }
+    void setBrightness(float brightness) override { brightness_ = brightness; }
+    
+    // 専用設定
+    void setPulsingEnabled(bool enable) { enablePulsing_ = enable; }
+    void setColorRotationEnabled(bool enable) { enableColorRotation_ = enable; }
+    void setRingWidth(uint8_t width) { ringWidth_ = width; }
+    void addRing(float latitude, CRGB color, float speed = 1.0f, float phase = 0.0f);
+    void clearRings() { rings_.clear(); }
+    
+    // テスト用アクセサ
+    size_t getRingCount() const { return rings_.size(); }
+    float getRingLatitude(size_t index) const;
+    CRGB getRingColor(size_t index) const;
+
+private:
+    void setupDefaultRings();
+    CRGB calculateRingColor(const Ring& ring, const PatternParams& params) const;
+    float calculateRingBrightness(const Ring& ring, const PatternParams& params) const;
+};
+
+/**
  * @brief 螺旋軌道パターン
  */
 class SpiralTrajectoryPattern : public IPattern {

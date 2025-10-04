@@ -307,6 +307,90 @@ void LatitudeRingPattern::drawLatitudeRing(float latitude, uint16_t color, float
     sphereManager_->drawLatitudeLine(latitude, ledColor, 2);  // 線幅2
 }
 
+// ---- YAxisRingPattern 実装 ----
+
+YAxisRingPattern::YAxisRingPattern() 
+    : globalSpeed_(1.0f), brightness_(1.0f), enablePulsing_(false), 
+      enableColorRotation_(false), ringWidth_(2) {
+    setupDefaultRings();
+}
+
+void YAxisRingPattern::setupDefaultRings() {
+    rings_.clear();
+    
+    // x軸スタイルに合わせた0.5緑いリング設定
+    // y軸周りの複数のリングを0.5緑色で統一（x軸の0.5緑に対応）
+    CRGB halfGreen = CRGB(0, 127, 0);  // 0.5緑色
+    rings_.push_back({60.0f, halfGreen, 1.0f, 0.0f});          // 北極寄り
+    rings_.push_back({30.0f, halfGreen, 1.0f, PI/4});          // 中緯度北
+    rings_.push_back({0.0f, halfGreen, 1.0f, PI/2});           // 赤道（メイン）
+    rings_.push_back({-30.0f, halfGreen, 1.0f, 3*PI/4});       // 中緯度南
+    rings_.push_back({-60.0f, halfGreen, 1.0f, PI});           // 南極寄り
+}
+
+void YAxisRingPattern::render(const PatternParams& params) {
+    if (!sphereManager_) return;
+    
+    sphereManager_->clearAllLEDs();
+    
+    for (const auto& ring : rings_) {
+        // 色計算
+        CRGB color = calculateRingColor(ring, params);
+        
+        // 輝度計算
+        float brightness = calculateRingBrightness(ring, params);
+        
+        // 最終色調整
+        color.nscale8((uint8_t)(brightness * 255));
+        
+        // y軸周りのリング描画（特定緯度の全周）
+        sphereManager_->drawLatitudeLine(ring.latitude, color, ringWidth_);
+    }
+    
+    sphereManager_->show();
+}
+
+CRGB YAxisRingPattern::calculateRingColor(const Ring& ring, const PatternParams& params) const {
+    CRGB color = ring.baseColor;
+    
+    // x軸スタイル：シンプルで一定の0.5緑色表示
+    // 色回転は無効にして、安定した0.5緑色を維持
+    if (enableColorRotation_) {
+        // 軽微な色調変化のみ（x軸らしい安定性）
+        float timePhase = params.time * globalSpeed_ * 0.1f + ring.phase;
+        float brightnessVariation = 0.9f + 0.1f * sinf(timePhase);
+        color.nscale8((uint8_t)(brightnessVariation * 255));
+    }
+    
+    return color;
+}
+
+float YAxisRingPattern::calculateRingBrightness(const Ring& ring, const PatternParams& params) const {
+    float brightness = brightness_;
+    
+    // x軸スタイル：控えめなパルス効果
+    if (enablePulsing_) {
+        // より穏やかな脈動（x軸の安定性に合わせて）
+        float timePhase = params.time * globalSpeed_ * ring.speed * 0.5f + ring.phase;
+        float pulseFactor = 0.7f + 0.3f * (sinf(timePhase) + 1.0f) / 2.0f;  // [0.7, 1.0] より狭い範囲
+        brightness *= pulseFactor;
+    }
+    
+    return brightness;
+}
+
+void YAxisRingPattern::addRing(float latitude, CRGB color, float speed, float phase) {
+    rings_.push_back({latitude, color, speed, phase});
+}
+
+float YAxisRingPattern::getRingLatitude(size_t index) const {
+    return (index < rings_.size()) ? rings_[index].latitude : 0.0f;
+}
+
+CRGB YAxisRingPattern::getRingColor(size_t index) const {
+    return (index < rings_.size()) ? rings_[index].baseColor : CRGB::Black;
+}
+
 // ---- LongitudeLinePattern 実装 ----
 
 LongitudeLinePattern::LongitudeLinePattern() 
@@ -534,6 +618,8 @@ std::unique_ptr<IPattern> PatternGenerator::createPattern(const std::string& pat
         return std::unique_ptr<LatitudeRingPattern>(new LatitudeRingPattern());
     } else if (patternName == "ring_fall_opening") {
         return std::unique_ptr<FallingRingOpeningPattern>(new FallingRingOpeningPattern());
+    } else if (patternName == "x_axis_half_green_rings") {
+        return std::unique_ptr<YAxisRingPattern>(new YAxisRingPattern());
     } else if (patternName == "longitude_lines") {
         return std::unique_ptr<LongitudeLinePattern>(new LongitudeLinePattern());
     } else if (patternName == "coordinate_axis") {
@@ -568,6 +654,7 @@ std::vector<std::string> PatternGenerator::getAvailablePatterns() const {
     return {
         "latitude_rings",
         "ring_fall_opening",
+        "x_axis_half_green_rings",
         "longitude_lines", 
         "coordinate_axis",
         "spiral_trajectory",
